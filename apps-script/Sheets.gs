@@ -194,6 +194,53 @@ function hariIni_() {
   return Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
 }
 
+/**
+ * Tambahkan sejumlah hari ke tanggal 'YYYY-MM-DD'.
+ *
+ * Dihitung dalam UTC dengan sengaja. Yang kita olah adalah tanggal kalender,
+ * bukan titik waktu — jatuh tempo 30 hari dari 1 Agustus selalu 31 Agustus,
+ * di zona waktu mana pun. Memakai zona lokal justru membuka celah pergeseran
+ * satu hari saat melewati batas tengah malam.
+ */
+function tambahHari_(tanggalStr, hari) {
+  var bagian = keTanggalStr_(tanggalStr).split('-');
+  if (bagian.length !== 3) {
+    throw errorApp('BAD_REQUEST', 'Format tanggal tidak sah: ' + tanggalStr);
+  }
+  var d = new Date(Date.UTC(
+    parseInt(bagian[0], 10), parseInt(bagian[1], 10) - 1, parseInt(bagian[2], 10)));
+  d.setUTCDate(d.getUTCDate() + Number(hari || 0));
+
+  var bln = String(d.getUTCMonth() + 1);
+  var tgl = String(d.getUTCDate());
+  return d.getUTCFullYear() + '-' +
+    (bln.length < 2 ? '0' + bln : bln) + '-' +
+    (tgl.length < 2 ? '0' + tgl : tgl);
+}
+
+/** Selisih hari antara dua tanggal 'YYYY-MM-DD'. Positif bila b setelah a. */
+function selisihHari_(a, b) {
+  var pa = keTanggalStr_(a).split('-');
+  var pb = keTanggalStr_(b).split('-');
+  if (pa.length !== 3 || pb.length !== 3) return 0;
+  var ms = Date.UTC(pb[0], pb[1] - 1, pb[2]) - Date.UTC(pa[0], pa[1] - 1, pa[2]);
+  return Math.round(ms / 86400000);
+}
+
+/** Periksa bentuk tanggal 'YYYY-MM-DD' sekaligus kewajarannya. */
+function wajibTanggal_(nilai, namaField) {
+  var t = keTanggalStr_(nilai);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+    throw errorApp('BAD_REQUEST',
+      namaField + ' harus berupa tanggal, contoh 2026-08-09.');
+  }
+  var thn = parseInt(t.substring(0, 4), 10);
+  if (thn < 2020 || thn > 2100) {
+    throw errorApp('BAD_REQUEST', namaField + ' di luar rentang yang masuk akal.');
+  }
+  return t;
+}
+
 
 // ---------------------------------------------------------------------------
 // Baca

@@ -363,6 +363,19 @@ def baca_penjualan(wb, produk, customers):
             )
             continue
 
+        # Nomor invoice memuat tahun dan bulannya sendiri (INV + YYMM + urut).
+        # Kalau tidak cocok dengan kolom Tanggal, salah satunya salah ketik.
+        # Nomor invoice jauh lebih jarang salah karena dibuat berurutan, jadi
+        # yang patut dicurigai biasanya tanggalnya.
+        cocok_no = re.fullmatch(r"INV(\d{2})(\d{2})\d{3}", invoice)
+        if cocok_no and (tgl[2:4], tgl[5:7]) != (cocok_no.group(1), cocok_no.group(2)):
+            LAP.todo(
+                f"TANGGAL TIDAK COCOK DENGAN NOMOR: {invoice} bertanggal {tgl}, "
+                f"padahal nomornya menunjuk 20{cocok_no.group(1)}-{cocok_no.group(2)}. "
+                f"Periksa nota aslinya — kemungkinan besar tahun pada kolom "
+                f"Tanggal salah ketik."
+            )
+
         if invoice not in orders:
             orders[invoice] = {
                 "invoice_no": invoice,

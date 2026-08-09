@@ -66,6 +66,11 @@ function panggil(konteks, action, payload, token) {
   return JSON.parse(panggilDoPost(konteks, JSON.stringify({ action, payload, token })));
 }
 
+/** Selisih hari antara dua tanggal ISO, untuk memeriksa jatuh tempo. */
+function selisihHariUji(a, b) {
+  return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+}
+
 function siapkanKonteks(secret = SECRET_UJI) {
   const ss = muatSpreadsheet(DIR_CSV);
   const konteks = bangunKonteks(ss, { SPREADSHEET_ID: 'ID_UJI', SECRET_KEY: secret });
@@ -116,9 +121,19 @@ function main() {
   });
 
   uji('action tak dikenal ditolak dengan UNKNOWN_ACTION', () => {
-    const r = panggil(konteks, 'sales.create', {});
+    const r = panggil(konteks, 'sales.hapusSemua', {});
     harus(!r.ok, 'harus gagal');
     harusSama(r.error.code, 'UNKNOWN_ACTION', 'kode error');
+  });
+
+  uji('action yang belum dibangun tidak diam-diam lolos', () => {
+    // Rute Fase 2 ke atas belum ada. Yang penting: ditolak sebagai action
+    // tak dikenal, bukan gagal dengan error internal yang membingungkan.
+    ['dashboard.summary', 'payment.create', 'gallon.balance', 'user.list']
+      .forEach((aksi) => {
+        const r = panggil(konteks, aksi, {}, tokenAdmin);
+        harusSama(r.error.code, 'UNKNOWN_ACTION', `${aksi} harus UNKNOWN_ACTION`);
+      });
   });
 
   uji('badan permintaan kosong ditolak rapi', () => {
@@ -378,6 +393,261 @@ function main() {
       'ORD' + String(jumlahOrder + 1).padStart(5, '0'), 'id order berikutnya');
   });
 
+  console.log('\n--- Master (Fase 1) ---');
+
+  uji('daftar produk memuat stok hasil agregasi, bukan kolom tersimpan', () => {
+    const r = panggil(konteks, 'master.products.list', {}, tokenAdmin);
+    harus(r.ok, 'gagal ambil produk');
+    harusSama(r.data.jumlah, 5, 'jumlah produk aktif');
+
+    const gd19 = r.data.daftar.find(p => p.code === 'GD19');
+    harusSama(gd19.stok, 50, 'stok GD19 dari stock_movements');
+    harusSama(gd19.margin, 3000, 'margin GD19');
+    harusSama(gd19.min_stock_terisi, false, 'min_stock belum diisi, harus jujur');
+  });
+
+  uji('admin melihat seluruh 21 customer', () => {
+    const r = panggil(konteks, 'master.customers.list', {}, tokenAdmin);
+    harusSama(r.data.jumlah, 21, 'jumlah customer');
+  });
+
+  uji('sales hanya melihat customer miliknya sendiri', () => {
+    const r = panggil(konteks, 'master.customers.list', {}, tokenSales);
+    harus(r.ok, 'gagal ambil customer');
+    const bukanMiliknya = r.data.daftar.filter(c => c.sales_person !== 'Zhulham');
+    harusSama(bukanMiliknya.length, 0,
+      `Zhulham melihat customer milik: ${bukanMiliknya.map(c => c.sales_person).join(', ')}`);
+    harus(r.data.jumlah > 0 && r.data.jumlah < 21,
+      `Zhulham harus melihat sebagian, dapat ${r.data.jumlah} dari 21`);
+  });
+
+  uji('invoice berstatus lunas tidak dihitung sebagai piutang', () => {
+    // Seluruh 111 invoice historis ditandai lunas saat migrasi, tapi tabel
+    // payments kosong. Tanpa penanganan khusus, selisihnya membuat setiap
+    // customer lama terlihat menunggak sebesar seluruh transaksinya.
+    const c = panggil(konteks, 'master.customers.list', {}, tokenAdmin);
+    const menunggak = c.data.daftar.filter((x) => x.piutang > 0);
+    harusSama(menunggak.length, 0,
+      `customer terlihat menunggak: ${menunggak.map((x) => x.code).join(', ')}`);
+
+    const s = panggil(konteks, 'sales.list', {}, tokenAdmin);
+    harusSama(s.data.ringkasan.belum_lunas, 0, 'total belum tertagih');
+    harusSama(s.data.ringkasan.nilai, 49020000, 'nilai penjualan tetap utuh');
+  });
+
+  uji('sales ditolak mengubah master produk', () => {
+    const r = panggil(konteks, 'master.products.upsert',
+      { code: 'GD19', name: 'Diubah', price: 99000 }, tokenSales);
+    harusSama(r.error.code, 'FORBIDDEN', 'kode error');
+  });
+
+  uji('HPP di atas harga jual ditolak', () => {
+    const r = panggil(konteks, 'master.products.upsert',
+      { code: 'GD19', name: 'Air Demineral', price: 15000, cogs: 20000 }, tokenAdmin);
+    harus(!r.ok, 'harus ditolak');
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  console.log('\n--- Penjualan (Fase 1) ---');
+
+  let orderBaru = null;
+
+  uji('penjualan tercipta dengan invoice, tempo, dan subtotal yang benar', () => {
+    const r = panggil(konteks, 'sales.create', {
+      customer_code: '01C25BLL',
+      items: [{ product_code: 'GD19', qty: 10 }, { product_code: 'GD12', qty: 5 }],
+    }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+
+    orderBaru = r.data;
+    harus(/^INV\d{7}$/.test(r.data.invoice_no),
+      `format invoice salah: ${r.data.invoice_no}`);
+    harusSama(r.data.subtotal, 10 * 15000 + 5 * 12000, 'subtotal');
+    harusSama(r.data.status, 'unpaid', 'status awal');
+    harusSama(r.data.tempo_hari, 30, 'tempo IOU 2020');
+    harusSama(selisihHariUji(r.data.order_date, r.data.due_date), 30, 'jarak jatuh tempo');
+  });
+
+  uji('stok berkurang otomatis setelah penjualan', () => {
+    const r = panggil(konteks, 'master.products.list', {}, tokenAdmin);
+    harusSama(r.data.daftar.find(p => p.code === 'GD19').stok, 40, 'stok GD19');
+    harusSama(r.data.daftar.find(p => p.code === 'GD12').stok, 15, 'stok GD12');
+  });
+
+  uji('galon tercatat keluar ke customer', () => {
+    const bacaT = vm.runInContext('bacaTabel', konteks);
+    const baris = bacaT('gallon_ledger')
+      .filter(g => g.ref_id === orderBaru.order_id);
+    harusSama(baris.length, 2, 'dua produk galon, dua baris ledger');
+    harusSama(baris.reduce((s, g) => s + Number(g.qty), 0), 15, 'total galon keluar');
+    harus(baris.every(g => g.movement_type === 'gallon_out'), 'jenis mutasi');
+  });
+
+  uji('harga khusus Pabrik Bentoel dipakai otomatis', () => {
+    // 13C26SGS punya kesepakatan GD05 seharga 20.000, jauh di atas harga
+    // master 7.500. Ini disengaja, bukan salah kode produk.
+    const r = panggil(konteks, 'sales.create', {
+      customer_code: '13C26SGS',
+      items: [{ product_code: 'GD05', qty: 4 }],
+    }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.items[0].unit_price, 20000, 'harga khusus terpakai');
+    harusSama(r.data.items[0].harga_khusus, true, 'ditandai sebagai harga khusus');
+    harusSama(r.data.subtotal, 80000, 'subtotal memakai harga khusus');
+  });
+
+  uji('nomor invoice berurut dan tidak kembar', () => {
+    const bacaT = vm.runInContext('bacaTabel', konteks);
+    const nomor = bacaT('sales_orders').map(o => o.invoice_no);
+    harusSama(new Set(nomor).size, nomor.length, 'ada invoice kembar');
+  });
+
+  uji('harga tidak bisa disetir dari frontend', () => {
+    // Payload menyertakan unit_price yang mencurigakan. Server harus
+    // mengabaikannya dan memakai harga master.
+    const r = panggil(konteks, 'sales.create', {
+      customer_code: '01C25BLL',
+      items: [{ product_code: 'GD19', qty: 1, unit_price: 1, line_total: 1 }],
+    }, tokenAdmin);
+    harus(r.ok, 'penjualan harus tetap dibuat');
+    harusSama(r.data.items[0].unit_price, 15000, 'harga dari master, bukan payload');
+    harusSama(r.data.subtotal, 15000, 'subtotal dihitung server');
+  });
+
+  uji('penjualan tanpa item ditolak', () => {
+    const r = panggil(konteks, 'sales.create',
+      { customer_code: '01C25BLL', items: [] }, tokenAdmin);
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('jumlah nol atau negatif ditolak', () => {
+    const r = panggil(konteks, 'sales.create', {
+      customer_code: '01C25BLL',
+      items: [{ product_code: 'GD19', qty: 0 }],
+    }, tokenAdmin);
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('produk tidak dikenal ditolak', () => {
+    const r = panggil(konteks, 'sales.create', {
+      customer_code: '01C25BLL',
+      items: [{ product_code: 'HANTU', qty: 1 }],
+    }, tokenAdmin);
+    harusSama(r.error.code, 'NOT_FOUND', 'kode error');
+  });
+
+  uji('tanggal di masa depan ditolak', () => {
+    const r = panggil(konteks, 'sales.create', {
+      customer_code: '01C25BLL',
+      order_date: '2099-01-01',
+      items: [{ product_code: 'GD19', qty: 1 }],
+    }, tokenAdmin);
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('penjualan gagal tidak meninggalkan baris separuh jadi', () => {
+    const bacaT = vm.runInContext('bacaTabel', konteks);
+    const sebelum = {
+      order: bacaT('sales_orders').length,
+      item: bacaT('sales_order_items').length,
+      mutasi: bacaT('stock_movements').length,
+      galon: bacaT('gallon_ledger').length,
+    };
+    // Baris kedua tidak sah, jadi seluruh transaksi harus ditolak utuh.
+    panggil(konteks, 'sales.create', {
+      customer_code: '01C25BLL',
+      items: [{ product_code: 'GD19', qty: 5 }, { product_code: 'HANTU', qty: 1 }],
+    }, tokenAdmin);
+
+    harusSama(bacaT('sales_orders').length, sebelum.order, 'sales_orders bertambah');
+    harusSama(bacaT('sales_order_items').length, sebelum.item, 'items bertambah');
+    harusSama(bacaT('stock_movements').length, sebelum.mutasi, 'stock_movements bertambah');
+    harusSama(bacaT('gallon_ledger').length, sebelum.galon, 'gallon_ledger bertambah');
+  });
+
+  uji('sales tidak bisa menjual atas nama customer orang lain', () => {
+    // 02C25MLG (Lafayette) adalah customer Abah, bukan Zhulham.
+    const r = panggil(konteks, 'sales.create', {
+      customer_code: '02C25MLG',
+      items: [{ product_code: 'GD19', qty: 1 }],
+    }, tokenSales);
+    harusSama(r.error.code, 'FORBIDDEN', 'kode error');
+  });
+
+  uji('daftar penjualan milik sales hanya berisi customer-nya', () => {
+    const r = panggil(konteks, 'sales.list', {}, tokenSales);
+    harus(r.ok, 'gagal ambil daftar');
+    const asing = r.data.daftar.filter(o => o.sales_person !== 'Zhulham');
+    harusSama(asing.length, 0,
+      `bocor: ${asing.slice(0, 3).map(o => o.invoice_no).join(', ')}`);
+  });
+
+  uji('sales.get menolak invoice milik sales lain', () => {
+    const semua = panggil(konteks, 'sales.list', {}, tokenAdmin).data.daftar;
+    const punyaAbah = semua.find(o => o.sales_person === 'Abah');
+    const r = panggil(konteks, 'sales.get', { order_id: punyaAbah.order_id }, tokenSales);
+    harusSama(r.error.code, 'FORBIDDEN', 'kode error');
+  });
+
+  uji('sales.get mengembalikan item lengkap dengan margin', () => {
+    const r = panggil(konteks, 'sales.get', { order_id: orderBaru.order_id }, tokenAdmin);
+    harus(r.ok, 'gagal ambil detail');
+    harusSama(r.data.items.length, 2, 'jumlah item');
+    harusSama(r.data.sisa, r.data.subtotal, 'belum ada pembayaran');
+    harusSama(r.data.items[0].margin, 10 * (15000 - 12000), 'margin baris pertama');
+    harusSama(r.data.hpp_lengkap, true, 'HPP kedua produk terisi');
+  });
+
+  console.log('\n--- Pembatalan ---');
+
+  uji('pembatalan tanpa alasan ditolak', () => {
+    const r = panggil(konteks, 'sales.cancel',
+      { order_id: orderBaru.order_id }, tokenAdmin);
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('pembatalan mengembalikan stok dan galon', () => {
+    const r = panggil(konteks, 'sales.cancel',
+      { order_id: orderBaru.order_id, alasan: 'Salah input customer' }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.galon_dikembalikan, 15, 'galon kembali');
+
+    const produk = panggil(konteks, 'master.products.list', {}, tokenAdmin).data.daftar;
+    // GD19: 50 awal, -10 order ini, -1 uji harga, +10 pembatalan = 49
+    harusSama(produk.find(p => p.code === 'GD19').stok, 49, 'stok GD19 setelah batal');
+    harusSama(produk.find(p => p.code === 'GD12').stok, 20, 'stok GD12 kembali penuh');
+  });
+
+  uji('baris asli tidak dihapus, hanya ditambah penyeimbang', () => {
+    const bacaT = vm.runInContext('bacaTabel', konteks);
+    const jejak = bacaT('stock_movements').filter(m => m.ref_id === orderBaru.order_id);
+    harus(jejak.some(m => m.movement_type === 'sale_out'),
+      'baris penjualan asli harus tetap ada');
+    harus(jejak.some(m => m.movement_type === 'adjustment'),
+      'baris penyeimbang harus ada');
+  });
+
+  uji('pembatalan kedua kali ditolak', () => {
+    const r = panggil(konteks, 'sales.cancel',
+      { order_id: orderBaru.order_id, alasan: 'coba lagi' }, tokenAdmin);
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('invoice batal tidak ikut dihitung dalam nilai penjualan', () => {
+    const r = panggil(konteks, 'sales.list', {}, tokenAdmin);
+    const batal = r.data.daftar.find(o => o.order_id === orderBaru.order_id);
+    harusSama(batal.status, 'cancelled', 'status');
+    harusSama(batal.terlambat_hari, 0, 'invoice batal tidak boleh terlihat menunggak');
+  });
+
+  uji('seluruh aksi tulis tercatat di audit_log', () => {
+    const bacaT = vm.runInContext('bacaTabel', konteks);
+    const aksi = new Set(bacaT('audit_log').map(l => l.action));
+    ['auth.login', 'sales.create', 'sales.cancel'].forEach(a => {
+      harus(aksi.has(a), `aksi ${a} tidak tercatat`);
+    });
+  });
+
   // -------------------------------------------------------------------------
 
   console.log('\n' + '='.repeat(72));
@@ -386,7 +656,7 @@ function main() {
     console.log('\nYang gagal:');
     kegagalan.forEach(k => console.log('  - ' + k));
   } else {
-    console.log('\nFondasi Fase 0 sehat. Aman dilanjutkan ke deploy Apps Script.');
+    console.log('\nBackend sehat. Aman di-push ke Apps Script.');
   }
   console.log('='.repeat(72));
   process.exit(gagal ? 1 : 0);

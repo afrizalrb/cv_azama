@@ -83,13 +83,20 @@ cv_azama/
 │   │                       Berisi SKEMA seluruh tab, helper baca/tulis,
 │   │                       LockService, penomoran ID, audit log.
 │   ├── Auth.gs             Hash password, token HMAC, penegakan role
+│   ├── Sales.gs            sales.create/list/get/cancel — validasi di depan,
+│   │                       penulisan di belakang, rollback bila gagal
+│   ├── Master.gs           Produk, customer, harga khusus
 │   ├── Setup.gs            Fungsi sekali jalan: buat tab, verifikasi data
 │   └── Code.gs             Router doPost — tabel rute dan penegakan akses
 │
 ├── frontend/               React + Vite + Tailwind, tayang di GitHub Pages
 │   ├── src/lib/api.js      Pembungkus fetch, penanganan error
 │   ├── src/lib/auth.js     Penyimpanan sesi di sessionStorage
-│   ├── src/App.jsx         Halaman Cek Koneksi (diganti di Fase 1)
+│   ├── src/lib/format.js   Rupiah dan tanggal berbahasa Indonesia
+│   ├── src/lib/hooks.js    useMuat dan useKirim
+│   ├── src/components/     Shell (menu samping) dan komponen bersama
+│   ├── src/pages/          Login, SalesList, SalesEntry, SalesDetail,
+│   │                       Masters, Akun
 │   ├── vite.config.js      base: '/cv_azama/'  ← harus sama dengan nama repo
 │   └── postcss.config.js   Penghenti pencarian konfigurasi PostCSS
 │
@@ -472,7 +479,7 @@ ini setiap kali dijalankan.
 | Fase | Isi | Status |
 |---|---|:--:|
 | 0 | Fondasi: skema, Sheets.gs, Auth.gs, router, migrasi, README | selesai |
-| 1 | Penjualan: `sales.*`, master produk & customer, Login, SalesEntry, SalesList | — |
+| 1 | Penjualan: `sales.*`, master produk & customer, Login, SalesEntry, SalesList | selesai |
 | 2 | Dashboard & Stok: `dashboard.*`, `stock.*` | — |
 | 3 | Piutang & Galon: `payment.*`, `receivable.aging`, `gallon.*` | — |
 | 4 | Produksi, Bahan, Biaya: `production.*`, `expense.*`, laporan laba bersih | — |

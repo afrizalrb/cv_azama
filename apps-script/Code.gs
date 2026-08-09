@@ -33,11 +33,33 @@
 // ---------------------------------------------------------------------------
 
 var RUTE = {
+  // --- tanpa token ---
   'ping':                 { fn: aksiPing,          publik: true },
   'auth.login':           { fn: authLogin,         publik: true },
+
+  // --- semua role yang sudah login ---
   'auth.me':              { fn: authMe,            roles: [] },
   'auth.logout':          { fn: authLogout,        roles: [] },
   'auth.changePassword':  { fn: authChangePassword, roles: [] },
+
+  // --- penjualan ---
+  // produksi tidak masuk daftar: mereka mencatat batch, bukan menjual.
+  'sales.create':         { fn: salesCreate,       roles: ['admin', 'sales'] },
+  'sales.list':           { fn: salesList,         roles: ['admin', 'sales'] },
+  'sales.get':            { fn: salesGet,          roles: ['admin', 'sales'] },
+  'sales.cancel':         { fn: salesCancel,       roles: ['admin', 'sales'] },
+
+  // --- master ---
+  // Daftar produk dibuka untuk semua role karena halaman Stok dan Produksi
+  // juga membutuhkannya. Yang mengubahnya tetap admin saja.
+  'master.products.list':        { fn: masterProductsList,        roles: [] },
+  'master.products.upsert':      { fn: masterProductsUpsert,      roles: ['admin'] },
+  'master.customers.list':       { fn: masterCustomersList,       roles: ['admin', 'sales'] },
+  'master.customers.upsert':     { fn: masterCustomersUpsert,     roles: ['admin'] },
+  'master.customerPrices.list':  { fn: masterCustomerPricesList,  roles: ['admin', 'sales'] },
+  'master.customerPrices.upsert':{ fn: masterCustomerPricesUpsert, roles: ['admin'] },
+
+  // --- sistem ---
   'system.diagnostics':   { fn: aksiDiagnostics,   roles: ['admin'] }
 };
 

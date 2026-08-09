@@ -88,13 +88,19 @@ function createAllSheets() {
     dibuat.push(nama);
   }
 
-  // Sheet1 bawaan dibiarkan kalau masih berisi sesuatu — menghapus data
-  // yang belum sempat diperiksa manusia bukan keputusan yang boleh diambil
-  // oleh skrip.
-  var bawaan = ss.getSheetByName('Sheet1') || ss.getSheetByName('Sheet 1');
-  if (bawaan && ss.getSheets().length > 1 && bawaan.getLastRow() === 0) {
-    ss.deleteSheet(bawaan);
-    dibuat.push('(Sheet1 kosong dihapus)');
+  // Tab bawaan dihapus hanya kalau benar-benar kosong. Menghapus data yang
+  // belum sempat diperiksa manusia bukan keputusan yang boleh diambil skrip.
+  //
+  // Namanya bergantung bahasa antarmuka Google Sheets pemiliknya: "Sheet1"
+  // dalam bahasa Inggris, "Lembar1" dalam bahasa Indonesia.
+  var namaBawaan = ['Sheet1', 'Sheet 1', 'Lembar1', 'Lembar 1'];
+  for (var b = 0; b < namaBawaan.length; b++) {
+    var bawaan = ss.getSheetByName(namaBawaan[b]);
+    if (bawaan && ss.getSheets().length > 1 && bawaan.getLastRow() === 0) {
+      ss.deleteSheet(bawaan);
+      dibuat.push('(' + namaBawaan[b] + ' kosong dihapus)');
+      break;
+    }
   }
 
   var laporan = [];

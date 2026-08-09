@@ -1,122 +1,269 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { panggilApi, ping, ApiError } from './lib/api'
+import { simpanSesi, hapusSesi, ambilUser, sudahLogin } from './lib/auth'
 
-function App() {
-  const [count, setCount] = useState(0)
+/**
+ * Halaman Cek Koneksi — perkakas verifikasi Fase 0, bukan halaman untuk
+ * pengguna akhir.
+ *
+ * Gunanya memisahkan tiga kegagalan yang gejalanya di layar tampak sama
+ * padahal penyebabnya berbeda jauh:
+ *
+ *   1. VITE_API_URL belum diisi          -> frontend tidak tahu harus ke mana
+ *   2. ping gagal                        -> web app belum ter-deploy benar
+ *   3. ping berhasil tapi login gagal    -> data users belum terimpor
+ *
+ * Halaman ini diganti Login yang sesungguhnya di Fase 1.
+ */
+
+const urlApi = import.meta.env.VITE_API_URL || ''
+
+export default function App() {
+  const [hasilPing, setHasilPing] = useState(null)
+  const [hasilLogin, setHasilLogin] = useState(null)
+  const [diagnostik, setDiagnostik] = useState(null)
+  const [sibuk, setSibuk] = useState('')
+  const [user, setUser] = useState(ambilUser())
+  const [form, setForm] = useState({ username: '', password: '' })
+
+  async function jalankan(nama, fn, setHasil) {
+    setSibuk(nama)
+    setHasil(null)
+    try {
+      setHasil({ ok: true, data: await fn() })
+    } catch (e) {
+      setHasil({
+        ok: false,
+        kode: e instanceof ApiError ? e.kode : 'ERROR',
+        pesan: e.message,
+      })
+    } finally {
+      setSibuk('')
+    }
+  }
+
+  async function masuk(ev) {
+    ev.preventDefault()
+    await jalankan('login', async () => {
+      const data = await panggilApi('auth.login', form)
+      simpanSesi(data.token, data.user)
+      setUser(data.user)
+      return data.user
+    }, setHasilLogin)
+  }
+
+  function keluar() {
+    hapusSesi()
+    setUser(null)
+    setHasilLogin(null)
+    setDiagnostik(null)
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="min-h-screen bg-slate-100 p-6">
+      <div className="mx-auto max-w-3xl space-y-5">
 
-      <div className="ticks"></div>
+        <header>
+          <h1 className="text-2xl font-bold text-slate-900">CV Azama Sejahtera</h1>
+          <p className="text-slate-600">Sistem Informasi Internal — Cek Koneksi</p>
+        </header>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        {/* Langkah 1 — konfigurasi */}
+        <Kartu nomor="1" judul="Alamat server">
+          {urlApi ? (
+            <Status ok>
+              Terisi: <code className="break-all text-xs">{urlApi}</code>
+            </Status>
+          ) : (
+            <Status>
+              <p className="font-medium">VITE_API_URL belum diisi.</p>
+              <p className="mt-1 text-sm">
+                Buat berkas <code>frontend/.env.local</code> berisi satu baris:
+              </p>
+              <pre className="mt-2 overflow-x-auto rounded bg-slate-900 p-2 text-xs text-slate-100">
+                VITE_API_URL=https://script.google.com/macros/s/.../exec
+              </pre>
+              <p className="mt-1 text-sm">Lalu jalankan ulang <code>npm run dev</code>.</p>
+            </Status>
+          )}
+        </Kartu>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        {/* Langkah 2 — backend hidup */}
+        <Kartu nomor="2" judul="Backend hidup">
+          <Tombol
+            onClick={() => jalankan('ping', ping, setHasilPing)}
+            sibuk={sibuk === 'ping'}
+            nonaktif={!urlApi}
+          >
+            Uji koneksi
+          </Tombol>
+          <Hasil hasil={hasilPing} />
+        </Kartu>
+
+        {/* Langkah 3 — login */}
+        <Kartu nomor="3" judul="Login">
+          {user ? (
+            <div className="space-y-3">
+              <Status ok>
+                Masuk sebagai <strong>{user.full_name}</strong> ({user.role})
+                {user.sales_person_name && ` — sales: ${user.sales_person_name}`}
+              </Status>
+              <Tombol onClick={keluar} varian="abu">Keluar</Tombol>
+            </div>
+          ) : (
+            <form onSubmit={masuk} className="space-y-3">
+              <Isian
+                label="Username"
+                value={form.username}
+                onChange={(v) => setForm({ ...form, username: v })}
+              />
+              <Isian
+                label="Password"
+                type="password"
+                value={form.password}
+                onChange={(v) => setForm({ ...form, password: v })}
+              />
+              <Tombol
+                type="submit"
+                sibuk={sibuk === 'login'}
+                nonaktif={!urlApi || !form.username || !form.password}
+              >
+                Masuk
+              </Tombol>
+            </form>
+          )}
+          <Hasil hasil={hasilLogin} />
+        </Kartu>
+
+        {/* Langkah 4 — data terimpor */}
+        {user?.role === 'admin' && (
+          <Kartu nomor="4" judul="Data terimpor">
+            <Tombol
+              onClick={() => jalankan(
+                'diag',
+                () => panggilApi('system.diagnostics'),
+                setDiagnostik
+              )}
+              sibuk={sibuk === 'diag'}
+            >
+              Hitung isi spreadsheet
+            </Tombol>
+
+            {diagnostik?.ok && (
+              <div className="mt-3 space-y-3">
+                <p className="text-sm text-slate-700">
+                  Total omzet tercatat:{' '}
+                  <strong>
+                    Rp {diagnostik.data.total_omzet_tercatat.toLocaleString('id-ID')}
+                  </strong>
+                  {diagnostik.data.total_omzet_tercatat === 49020000 && (
+                    <span className="ml-2 text-emerald-700">
+                      cocok dengan total di Excel
+                    </span>
+                  )}
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {Object.entries(diagnostik.data.jumlah_baris).map(([tab, n]) => (
+                        <tr key={tab} className="border-b border-slate-100">
+                          <td className="py-1 pr-4 text-slate-600">{tab}</td>
+                          <td className="py-1 text-right font-mono">
+                            {n === null ? 'tab belum ada' : n}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {diagnostik && !diagnostik.ok && <Hasil hasil={diagnostik} />}
+          </Kartu>
+        )}
+
+        <p className="pb-4 text-center text-xs text-slate-500">
+          Halaman ini diganti antarmuka sesungguhnya pada Fase 1.
+        </p>
+      </div>
+    </div>
   )
 }
 
-export default App
+/* --- Komponen tampilan sederhana ------------------------------------------ */
+
+function Kartu({ nomor, judul, children }) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-800">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs text-white">
+          {nomor}
+        </span>
+        {judul}
+      </h2>
+      {children}
+    </section>
+  )
+}
+
+function Status({ ok, children }) {
+  return (
+    <div
+      className={`rounded border p-3 text-sm ${
+        ok
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+          : 'border-amber-200 bg-amber-50 text-amber-900'
+      }`}
+    >
+      {children}
+    </div>
+  )
+}
+
+function Hasil({ hasil }) {
+  if (!hasil) return null
+  if (hasil.ok) {
+    return (
+      <pre className="mt-3 overflow-x-auto rounded bg-emerald-50 p-3 text-xs text-emerald-900">
+        {JSON.stringify(hasil.data, null, 2)}
+      </pre>
+    )
+  }
+  return (
+    <div className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+      <p className="font-mono text-xs text-red-700">{hasil.kode}</p>
+      <p className="mt-1">{hasil.pesan}</p>
+    </div>
+  )
+}
+
+function Tombol({ children, sibuk, nonaktif, varian = 'gelap', ...sisa }) {
+  const warna =
+    varian === 'abu'
+      ? 'bg-slate-200 text-slate-800 hover:bg-slate-300'
+      : 'bg-slate-800 text-white hover:bg-slate-700'
+  return (
+    <button
+      {...sisa}
+      disabled={sibuk || nonaktif}
+      className={`rounded px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${warna}`}
+    >
+      {sibuk ? 'Memproses...' : children}
+    </button>
+  )
+}
+
+function Isian({ label, type = 'text', value, onChange }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={type === 'password' ? 'current-password' : 'username'}
+        className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+      />
+    </label>
+  )
+}

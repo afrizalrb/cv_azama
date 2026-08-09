@@ -1,49 +1,35 @@
-# Dependencies
+# Dependensi & hasil build
 node_modules/
+dist/
+build/
 
-# Build outputs
-/dist/
-/build/
-/.next/
-/.turbo/
-
-# Environment files
+# Variabel lingkungan — VITE_API_URL disimpan di sini, bukan di repo
 .env
 .env.local
 .env.*.local
 
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+# Kredensial clasp — WAJIB di-ignore.
+# .clasp.json berisi Script ID, .clasprc.json berisi token OAuth Google.
+.clasp.json
+.clasprc.json
 
-# OS files
+# Data operasional perusahaan — tidak boleh masuk repo publik.
+# Berisi file Excel sumber dan CSV hasil migrasi (nama customer, omzet, kontak).
+data/
+
+# Setelan lokal perkakas pengembangan — beda tiap komputer
+.claude/
+.vscode/
+.idea/
+
+# Berkas sistem & log
+*.log
+npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Temporary files
-.tmp/
-.temp/
-
-
-cat > .gitignore << 'EOF'
-node_modules/
-dist/
-.env
-.env.local
-.env.*.local
-.clasp.json
-.clasprc.json
-*.log
-.DS_Store
+# Python
 __pycache__/
 *.pyc
-data/
-EOF
+.venv/
+venv/

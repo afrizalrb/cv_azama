@@ -1,0 +1,12 @@
+# Simpan semua berkas teks dengan akhir baris LF di dalam repo.
+#
+# Tanpa ini, Windows menyimpan CRLF dan setiap diff jadi penuh perubahan palsu.
+# Lebih penting lagi: berkas .gs diunggah apa adanya ke Google Apps Script,
+# yang lingkungannya berbasis Unix.
+* text=auto eol=lf
+
+# Berkas biner — jangan diutak-atik akhir barisnya.
+*.xlsx binary
+*.png  binary
+*.jpg  binary
+*.ico  binary

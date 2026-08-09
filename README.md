@@ -95,6 +95,7 @@ cv_azama/
 │
 ├── scripts/
 │   ├── migrate_excel.py    Migrasi sekali jalan: xlsx → CSV per tab
+│   ├── generate_seeder.cjs CSV → data/Seed.gs, pengisi data tanpa dialog impor
 │   ├── lib/harness.cjs     Tiruan SpreadsheetApp, Utilities, LockService
 │   ├── local_test.cjs      Uji Apps Script di komputer, tanpa akun Google
 │   └── local_server.cjs    Sajikan backend lewat HTTP lokal untuk dev
@@ -271,24 +272,43 @@ Run. Google akan meminta izin akses pada fungsi pertama — setujui.
 `createAllSheets()` aman dijalankan berulang kali. Tab yang sudah ada tidak
 disentuh isinya, hanya headernya yang diperiksa.
 
-### Tahap 5 — Impor data
+### Tahap 5 — Isi data
 
-Untuk tiap CSV di `data/csv/`, di spreadsheet: **File → Import → Upload**,
-pilih:
+Dua cara. Yang pertama jauh lebih aman.
+
+**A. Lewat berkas penyemai (disarankan)**
+
+```bash
+node scripts/generate_seeder.cjs
+```
+
+Menghasilkan `data/Seed.gs`. Di editor Apps Script, tambah berkas baru
+bernama `Seed`, tempel seluruh isinya, simpan, lalu jalankan
+`imporSemuaData()`.
+
+Datanya ditulis lewat `setValues()` dengan tipe yang sudah ditentukan dari
+`SKEMA`, jadi tidak ada dialog yang bisa salah disetel. Fungsi itu juga
+menolak menimpa tab yang sudah berisi data kecuali `TIMPA_DATA_YANG_ADA`
+diubah ke `true`.
+
+Hapus berkas `Seed` dari proyek setelah selesai — isinya data perusahaan.
+
+**B. Impor CSV manual**
+
+Untuk tiap CSV di `data/csv/`: **File → Import → Upload**, dengan
 
 - **Import location:** Replace data at selected cell
 - **Sel yang dipilih:** `A2` pada tab bersangkutan
 - **Convert text to numbers, dates, and formulas:** **matikan**
 
-Opsi terakhir itu penting. Kalau dibiarkan menyala, Google Sheets akan
-mengubah `2024-09-30` menjadi objek tanggal dan berpotensi merusak hash
-password. `createAllSheets()` sudah menyetel kolom-kolom rawan ke format
-Teks Polos untuk mencegah ini, tapi mematikan opsi tersebut adalah lapis
-pengaman kedua.
+Opsi terakhir itu yang berbahaya. Kalau menyala, Google Sheets mengubah
+`2024-09-30` jadi objek tanggal, dan hash password 64 karakter bisa berubah
+jadi notasi ilmiah — user tidak akan pernah bisa login lagi, tanpa cara
+memulihkan selain mengulang migrasi.
 
-Lalu jalankan `cekIsiData()` dari editor. Fungsi ini memeriksa jumlah baris,
-keutuhan hash password, konsistensi format tanggal, dan apakah ada order
-yang menunjuk customer tidak ada.
+**Akhiri dengan `cekIsiData()`** apa pun caranya. Fungsi ini memeriksa jumlah
+baris, keutuhan hash password, konsistensi format tanggal, dan apakah ada
+order yang menunjuk customer tidak ada.
 
 ### Tahap 6 — Deploy web app
 

@@ -112,8 +112,17 @@ function createAllSheets() {
     bermasalah.forEach(function (b) { laporan.push('  ' + b); });
   }
   laporan.push('');
-  laporan.push('Berikutnya: impor CSV hasil migrasi lewat File > Import,');
-  laporan.push('pilih "Replace data at selected cell" pada sel A2 tiap tab.');
+  laporan.push('Berikutnya, isi datanya. Dua cara:');
+  laporan.push('');
+  laporan.push('  A. Disarankan — jalankan "node scripts/generate_seeder.cjs" di');
+  laporan.push('     komputer, salin data/Seed.gs ke proyek ini, lalu jalankan');
+  laporan.push('     imporSemuaData(). Tipe tiap kolom sudah dipastikan benar.');
+  laporan.push('');
+  laporan.push('  B. Manual — File > Import tiap CSV ke sel A2, dengan opsi');
+  laporan.push('     "Convert text to numbers, dates, and formulas" DIMATIKAN.');
+  laporan.push('     Kalau opsi itu menyala, hash password bisa rusak permanen.');
+  laporan.push('');
+  laporan.push('Apa pun caranya, akhiri dengan cekIsiData().');
 
   console.log(laporan.join('\n'));
   return laporan.join('\n');

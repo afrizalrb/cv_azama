@@ -25,6 +25,8 @@ export default function App() {
   const [sibuk, setSibuk] = useState('')
   const [user, setUser] = useState(ambilUser())
   const [form, setForm] = useState({ username: '', password: '' })
+  const [formPw, setFormPw] = useState({ lama: '', baru: '', ulangi: '' })
+  const [hasilPw, setHasilPw] = useState(null)
 
   async function jalankan(nama, fn, setHasil) {
     setSibuk(nama)
@@ -57,6 +59,30 @@ export default function App() {
     setUser(null)
     setHasilLogin(null)
     setDiagnostik(null)
+    setHasilPw(null)
+    setFormPw({ lama: '', baru: '', ulangi: '' })
+  }
+
+  async function gantiPassword(ev) {
+    ev.preventDefault()
+
+    // Kecocokan dua isian diperiksa di sini karena backend tidak mungkin
+    // tahu pengguna salah ketik. Aturan lainnya — panjang minimal, harus
+    // berbeda dari yang lama, kebenaran password lama — tetap ditegakkan
+    // di Apps Script, bukan di sini.
+    if (formPw.baru !== formPw.ulangi) {
+      setHasilPw({ ok: false, kode: 'TIDAK_COCOK', pesan: 'Ketikan password baru tidak sama.' })
+      return
+    }
+
+    await jalankan('pw', async () => {
+      const data = await panggilApi('auth.changePassword', {
+        password_lama: formPw.lama,
+        password_baru: formPw.baru,
+      })
+      setFormPw({ lama: '', baru: '', ulangi: '' })
+      return data
+    }, setHasilPw)
   }
 
   return (
@@ -182,6 +208,48 @@ export default function App() {
           </Kartu>
         )}
 
+        {/* Langkah 5 — ganti password bawaan */}
+        {user && (
+          <Kartu nomor="5" judul="Ganti password">
+            <p className="mb-3 text-sm text-slate-600">
+              Password awal dibangkitkan acak oleh skrip migrasi dan tersimpan
+              sebagai teks polos di berkas <code>KREDENSIAL_AWAL.txt</code>.
+              Setiap pengguna sebaiknya menggantinya sekali di sini, lalu
+              berkas itu dihapus.
+            </p>
+            <form onSubmit={gantiPassword} className="space-y-3">
+              <Isian
+                label="Password sekarang"
+                type="password"
+                value={formPw.lama}
+                onChange={(v) => setFormPw({ ...formPw, lama: v })}
+              />
+              <Isian
+                label="Password baru (minimal 8 karakter)"
+                type="password"
+                autoComplete="new-password"
+                value={formPw.baru}
+                onChange={(v) => setFormPw({ ...formPw, baru: v })}
+              />
+              <Isian
+                label="Ulangi password baru"
+                type="password"
+                autoComplete="new-password"
+                value={formPw.ulangi}
+                onChange={(v) => setFormPw({ ...formPw, ulangi: v })}
+              />
+              <Tombol
+                type="submit"
+                sibuk={sibuk === 'pw'}
+                nonaktif={!formPw.lama || !formPw.baru || !formPw.ulangi}
+              >
+                Simpan password baru
+              </Tombol>
+            </form>
+            <Hasil hasil={hasilPw} />
+          </Kartu>
+        )}
+
         <p className="pb-4 text-center text-xs text-slate-500">
           Halaman ini diganti antarmuka sesungguhnya pada Fase 1.
         </p>
@@ -253,7 +321,7 @@ function Tombol({ children, sibuk, nonaktif, varian = 'gelap', ...sisa }) {
   )
 }
 
-function Isian({ label, type = 'text', value, onChange }) {
+function Isian({ label, type = 'text', value, onChange, autoComplete }) {
   return (
     <label className="block">
       <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
@@ -261,7 +329,9 @@ function Isian({ label, type = 'text', value, onChange }) {
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        autoComplete={type === 'password' ? 'current-password' : 'username'}
+        autoComplete={
+          autoComplete || (type === 'password' ? 'current-password' : 'username')
+        }
         className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
       />
     </label>

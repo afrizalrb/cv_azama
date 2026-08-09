@@ -328,14 +328,28 @@ Salin **Web app URL** yang berakhiran `/exec`.
 Verifikasi:
 
 ```bash
-curl -L -X POST "URL_ANDA/exec" -H "Content-Type: text/plain" -d "{\"action\":\"ping\"}"
+curl -L -H "Content-Type: text/plain" -d "{\"action\":\"ping\"}" "URL_ANDA/exec"
 ```
 
 Harus mengembalikan `{"ok":true,"data":{"service":"AZAMA API",...}}`.
 
-Flag `-L` wajib. Apps Script selalu membalas dengan redirect ke
-`googleusercontent.com`; tanpa `-L`, curl berhenti di redirect dan Anda akan
-melihat HTML, bukan JSON.
+**Perhatikan bahwa perintah itu tidak memakai `-X POST`.** Ini penting, dan
+berlawanan dengan naluri.
+
+Apps Script membalas POST dengan redirect 302 ke `googleusercontent.com`,
+dan jawaban yang sudah dihitung itu harus diambil dengan **GET**. Perilaku
+bawaan curl saat mengikuti redirect memang persis begitu — POST ke `/exec`,
+lalu GET ke tujuan redirect. `-d` sendiri sudah membuat permintaan pertama
+menjadi POST, jadi `-X POST` tidak diperlukan.
+
+Menambahkan `-X POST` justru merusaknya: curl akan memaksa POST pada redirect
+tanpa mengirim ulang badan permintaan, dan Google menolak dengan
+`411 Length Required`. Memaksanya lagi dengan `--post302` menghasilkan
+kegagalan berbeda — POST ke `googleusercontent.com` dibalas halaman Drive
+"Maaf, saat ini tidak dapat membuka file", yang menyesatkan karena terlihat
+seperti masalah izin akses.
+
+Yang benar cukup `-L` dan `-d`.
 
 ### Tahap 7 — Hubungkan frontend
 
@@ -411,6 +425,8 @@ Jangan lupa `git push` juga — itu langkah yang terpisah sepenuhnya.
 | Gejala | Penyebab | Solusi |
 |---|---|---|
 | Halaman Pages putih kosong tanpa error | `base` di `vite.config.js` salah | Harus persis `'/cv_azama/'`, sama dengan nama repo |
+| `curl` menjawab `411 Length Required` | `-X POST` memaksa POST pada redirect tanpa badan permintaan | Buang `-X POST`, cukup `-L` dan `-d` |
+| `curl` menjawab halaman Drive "tidak dapat membuka file" | `--post302` mem-POST ke `googleusercontent.com` | Buang `--post*`, biarkan curl beralih ke GET |
 | `curl` mengembalikan HTML, bukan JSON | Redirect tidak diikuti | Tambahkan flag `-L` |
 | Frontend gagal dengan error CORS | Header `Content-Type: application/json` memicu preflight | Sudah ditangani: `api.js` memakai `text/plain` |
 | Balasan berupa halaman login Google | Deployment tidak diatur "Anyone" | Ubah di Manage deployments |

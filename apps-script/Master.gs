@@ -42,8 +42,6 @@ function masterProductsList(payload, sesi) {
     if (!aktif && !termasukNonaktif) return;
 
     var kode = keTeks_(pr.code).toUpperCase();
-    var minStok = keAngka_(pr.min_stock);
-    var stokKini = stok[kode] || 0;
     var hpp = keAngka_(pr.cogs);
     var harga = keAngka_(pr.price);
 
@@ -54,16 +52,18 @@ function masterProductsList(payload, sesi) {
       volume_ml: keAngka_(pr.volume_ml),
       cogs: hpp,
       price: harga,
-      min_stock: minStok,
+      min_stock: keAngka_(pr.min_stock),
       is_returnable: keBool_(pr.is_returnable),
       deposit_amount: keAngka_(pr.deposit_amount),
       is_active: aktif,
-      stok: stokKini,
-      // Alert hanya bermakna kalau min_stock sudah diisi. Selama masih nol,
-      // seluruh produk akan terlihat "aman" — itu bukan kesimpulan, hanya
-      // ketiadaan data, dan frontend perlu bisa membedakannya.
-      min_stock_terisi: minStok > 0,
-      stok_menipis: minStok > 0 && stokKini <= minStok,
+      // Saldo mutasi, bukan "stok tersedia".
+      //
+      // Model bisnisnya pre-order — produksi mengikuti pesanan, tidak ada
+      // penyetokan barang jadi. Angka ini tetap dihitung karena buku besar
+      // mutasi tetap diisi, dan akan bermakna begitu batch produksi dicatat
+      // di Fase 4. Sampai saat itu nilainya wajar minus, dan frontend
+      // sengaja tidak menampilkannya.
+      saldo_mutasi: stok[kode] || 0,
       margin: harga - hpp,
       margin_persen: harga > 0 ? Math.round((harga - hpp) / harga * 100) : 0,
       hpp_terisi: hpp > 0

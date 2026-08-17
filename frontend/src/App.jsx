@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { sudahLogin, ambilUser } from './lib/auth'
 import Shell from './components/Shell'
@@ -7,7 +8,15 @@ import SalesEntry from './pages/SalesEntry'
 import SalesDetail from './pages/SalesDetail'
 import Masters from './pages/Masters'
 import Akun from './pages/Akun'
-import { Kartu, JudulHalaman, Tombol } from './components/ui'
+import { Kartu, JudulHalaman, Tombol, SedangMemuat } from './components/ui'
+
+/**
+ * Dashboard dimuat terpisah karena satu-satunya halaman yang memakai Recharts,
+ * dan pustaka itu sendirian menambah lebih dari 350 KB. Tanpa pemisahan ini,
+ * halaman login — yang dibuka semua orang setiap pagi — ikut menunggu pustaka
+ * grafik selesai diunduh sebelum menampilkan apa pun.
+ */
+const Dashboard = lazy(() => import('./pages/Dashboard'))
 
 /**
  * App.jsx — perutean.
@@ -25,6 +34,16 @@ export default function App() {
       <Routes>
         <Route path="/masuk" element={<HanyaTamu><Login /></HanyaTamu>} />
 
+        <Route
+          path="/dashboard"
+          element={
+            <Terlindungi roles={['admin', 'sales']}>
+              <Suspense fallback={<SedangMemuat pesan="Menyiapkan grafik..." />}>
+                <Dashboard />
+              </Suspense>
+            </Terlindungi>
+          }
+        />
         <Route path="/penjualan" element={<Terlindungi roles={['admin', 'sales']}><SalesList /></Terlindungi>} />
         <Route path="/penjualan/baru" element={<Terlindungi roles={['admin', 'sales']}><SalesEntry /></Terlindungi>} />
         <Route path="/penjualan/:orderId" element={<Terlindungi roles={['admin', 'sales']}><SalesDetail /></Terlindungi>} />
@@ -32,7 +51,7 @@ export default function App() {
         <Route path="/master" element={<Terlindungi roles={['admin', 'sales']}><Masters /></Terlindungi>} />
         <Route path="/akun" element={<Terlindungi><Akun /></Terlindungi>} />
 
-        <Route path="/" element={<Navigate to="/penjualan" replace />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Terlindungi><TidakDitemukan /></Terlindungi>} />
       </Routes>
     </HashRouter>
@@ -72,7 +91,7 @@ function Terlindungi({ roles, children }) {
 }
 
 function HanyaTamu({ children }) {
-  return sudahLogin() ? <Navigate to="/penjualan" replace /> : children
+  return sudahLogin() ? <Navigate to="/dashboard" replace /> : children
 }
 
 function TidakDitemukan() {

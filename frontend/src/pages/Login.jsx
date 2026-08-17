@@ -27,7 +27,7 @@ export default function Login() {
         password: form.password,
       })
       simpanSesi(data.token, data.user)
-      navigate(data.user.role === 'produksi' ? '/galon' : '/penjualan', { replace: true })
+      navigate(data.user.role === 'produksi' ? '/akun' : '/dashboard', { replace: true })
     } catch (e) {
       setGalat(e instanceof ApiError ? e : new ApiError('ERROR', e.message))
     } finally {

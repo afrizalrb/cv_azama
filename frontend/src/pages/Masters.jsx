@@ -89,7 +89,6 @@ function TabelProduk({ bolehUbah }) {
             { label: 'HPP', kanan: true },
             { label: 'Harga jual', kanan: true },
             { label: 'Margin', kanan: true },
-            { label: 'Stok', kanan: true },
             { label: '' },
           ]}
         >
@@ -115,16 +114,6 @@ function TabelProduk({ bolehUbah }) {
                     <span className="ml-1.5 text-xs text-slate-400">{p.margin_persen}%</span>
                   </>
                 ) : <span className="text-slate-300">—</span>}
-              </Sel>
-              <Sel kanan tebal>
-                <span className={p.stok_menipis ? 'text-red-600' : ''}>
-                  {angka(p.stok)}
-                </span>
-                {!p.min_stock_terisi && (
-                  <span className="block text-xs font-normal text-slate-400">
-                    min. belum diatur
-                  </span>
-                )}
               </Sel>
               <Sel>
                 <div className="flex items-center justify-end gap-2">
@@ -202,11 +191,9 @@ function FormProduk({ awal, onTutup, onSelesai }) {
             keterangan="Tanpa ini, laporan margin tidak bermakna" />
           <Isian label="Harga jual" type="number" value={f.price}
             onChange={(e) => setF({ ...f, price: e.target.value })} />
-          <Isian label="Stok minimum" type="number" value={f.min_stock}
-            onChange={(e) => setF({ ...f, min_stock: e.target.value })}
-            keterangan="Alert stok menipis memakai angka ini" />
           <Isian label="Nilai deposit galon" type="number" value={f.deposit_amount}
-            onChange={(e) => setF({ ...f, deposit_amount: e.target.value })} />
+            onChange={(e) => setF({ ...f, deposit_amount: e.target.value })}
+            keterangan="Dipakai modul tukar galon di Fase 3" />
         </div>
 
         <div className="flex flex-wrap gap-5 rounded-lg bg-slate-50 px-4 py-3">

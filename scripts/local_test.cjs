@@ -129,7 +129,8 @@ function main() {
   uji('action yang belum dibangun tidak diam-diam lolos', () => {
     // Rute Fase 2 ke atas belum ada. Yang penting: ditolak sebagai action
     // tak dikenal, bukan gagal dengan error internal yang membingungkan.
-    ['dashboard.summary', 'payment.create', 'gallon.balance', 'user.list']
+    ['payment.create', 'receivable.aging', 'gallon.balance',
+     'production.create', 'expense.create', 'user.list', 'stock.current']
       .forEach((aksi) => {
         const r = panggil(konteks, aksi, {}, tokenAdmin);
         harusSama(r.error.code, 'UNKNOWN_ACTION', `${aksi} harus UNKNOWN_ACTION`);
@@ -395,15 +396,16 @@ function main() {
 
   console.log('\n--- Master (Fase 1) ---');
 
-  uji('daftar produk memuat stok hasil agregasi, bukan kolom tersimpan', () => {
+  uji('daftar produk memuat saldo mutasi hasil agregasi, bukan kolom tersimpan', () => {
     const r = panggil(konteks, 'master.products.list', {}, tokenAdmin);
     harus(r.ok, 'gagal ambil produk');
     harusSama(r.data.jumlah, 5, 'jumlah produk aktif');
 
     const gd19 = r.data.daftar.find(p => p.code === 'GD19');
-    harusSama(gd19.stok, 50, 'stok GD19 dari stock_movements');
+    harusSama(gd19.saldo_mutasi, 50, 'saldo GD19 dari stock_movements');
     harusSama(gd19.margin, 3000, 'margin GD19');
-    harusSama(gd19.min_stock_terisi, false, 'min_stock belum diisi, harus jujur');
+    // Tidak ada lagi penanda stok menipis — model bisnisnya pre-order.
+    harusSama(gd19.stok_menipis, undefined, 'penanda alert stok harus sudah hilang');
   });
 
   uji('admin melihat seluruh 21 customer', () => {
@@ -468,10 +470,13 @@ function main() {
     harusSama(selisihHariUji(r.data.order_date, r.data.due_date), 30, 'jarak jatuh tempo');
   });
 
-  uji('stok berkurang otomatis setelah penjualan', () => {
+  uji('mutasi barang keluar tetap dicatat meski stok tidak ditampilkan', () => {
+    // Buku besar tetap diisi supaya riwayat barang keluar utuh, dan supaya
+    // batch produksi di Fase 4 punya lawan hitung. Yang dihilangkan hanya
+    // penyajiannya sebagai "stok tersedia".
     const r = panggil(konteks, 'master.products.list', {}, tokenAdmin);
-    harusSama(r.data.daftar.find(p => p.code === 'GD19').stok, 40, 'stok GD19');
-    harusSama(r.data.daftar.find(p => p.code === 'GD12').stok, 15, 'stok GD12');
+    harusSama(r.data.daftar.find(p => p.code === 'GD19').saldo_mutasi, 40, 'saldo GD19');
+    harusSama(r.data.daftar.find(p => p.code === 'GD12').saldo_mutasi, 15, 'saldo GD12');
   });
 
   uji('galon tercatat keluar ke customer', () => {
@@ -614,8 +619,8 @@ function main() {
 
     const produk = panggil(konteks, 'master.products.list', {}, tokenAdmin).data.daftar;
     // GD19: 50 awal, -10 order ini, -1 uji harga, +10 pembatalan = 49
-    harusSama(produk.find(p => p.code === 'GD19').stok, 49, 'stok GD19 setelah batal');
-    harusSama(produk.find(p => p.code === 'GD12').stok, 20, 'stok GD12 kembali penuh');
+    harusSama(produk.find(p => p.code === 'GD19').saldo_mutasi, 49, 'saldo GD19 setelah batal');
+    harusSama(produk.find(p => p.code === 'GD12').saldo_mutasi, 20, 'saldo GD12 kembali penuh');
   });
 
   uji('baris asli tidak dihapus, hanya ditambah penyeimbang', () => {
@@ -646,6 +651,159 @@ function main() {
     ['auth.login', 'sales.create', 'sales.cancel'].forEach(a => {
       harus(aksi.has(a), `aksi ${a} tidak tercatat`);
     });
+  });
+
+  console.log('\n--- Dashboard (Fase 2) ---');
+
+  uji('ringkasan admin memuat omzet, margin, dan tren bulanan', () => {
+    const r = panggil(konteks, 'dashboard.summary', { bulan: 12 }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.dashboard_penuh, true, 'admin dapat dashboard penuh');
+    harusSama(r.data.bulanan.length, 12, 'jumlah titik grafik');
+    harus(r.data.ringkasan.margin_total !== null, 'margin harus ada untuk admin');
+    harus(r.data.produk_teratas.length > 0, 'produk terlaris kosong');
+    harus(r.data.customer_teratas.length > 0, 'customer teratas kosong');
+  });
+
+  uji('omzet dashboard cocok dengan total daftar penjualan', () => {
+    const d = panggil(konteks, 'dashboard.summary', {}, tokenAdmin).data;
+    const s = panggil(konteks, 'sales.list', {}, tokenAdmin).data;
+    harusSama(d.ringkasan.omzet_total, s.ringkasan.nilai,
+      'dua sumber angka omzet harus sama');
+  });
+
+  uji('invoice dibatalkan tidak masuk omzet', () => {
+    const d = panggil(konteks, 'dashboard.summary', {}, tokenAdmin).data;
+    harus(d.ringkasan.invoice_dibatalkan > 0,
+      'uji pembatalan sebelumnya harus tercermin di sini');
+    const bacaT = vm.runInContext('bacaTabel', konteks);
+    const semua = bacaT('sales_orders')
+      .reduce((s, o) => s + (String(o.status).toLowerCase() === 'cancelled'
+        ? 0 : keAngka(o.subtotal)), 0);
+    harusSama(d.ringkasan.omzet_total, semua, 'omzet tanpa yang dibatalkan');
+  });
+
+  uji('sales menerima dashboard terbatas tanpa margin', () => {
+    const r = panggil(konteks, 'dashboard.summary', {}, tokenSales);
+    harus(r.ok, 'sales harus boleh membuka dashboard');
+    harusSama(r.data.dashboard_penuh, false, 'bukan dashboard penuh');
+    harusSama(r.data.ringkasan.margin_total, null, 'margin harus disembunyikan');
+    harusSama(r.data.ringkasan.hpp_total, null, 'HPP harus disembunyikan');
+    harus(r.data.produk_teratas.every((p) => p.margin === null),
+      'margin per produk juga harus disembunyikan');
+  });
+
+  uji('omzet sales lebih kecil dari omzet admin', () => {
+    const a = panggil(konteks, 'dashboard.summary', {}, tokenAdmin).data;
+    const s = panggil(konteks, 'dashboard.summary', {}, tokenSales).data;
+    harus(s.ringkasan.omzet_total < a.ringkasan.omzet_total,
+      'sales tidak boleh melihat omzet seluruh perusahaan');
+    harus(s.ringkasan.omzet_total > 0, 'sales harus melihat omzetnya sendiri');
+  });
+
+  uji('margin ditandai tidak bisa dipercaya bila ada HPP nol', () => {
+    const d = panggil(konteks, 'dashboard.summary', {}, tokenAdmin).data;
+    // GTDS019 dan produk lain punya HPP terisi, tapi invoice historis bisa
+    // menyimpan unit_cogs nol. Yang diuji: penandanya konsisten dengan data.
+    const bacaT = vm.runInContext('bacaTabel', konteks);
+    const adaNol = bacaT('sales_order_items').some((it) => keAngka(it.unit_cogs) <= 0);
+    harusSama(d.ringkasan.margin_bisa_dipercaya, !adaNol,
+      'penanda margin harus mencerminkan ada tidaknya HPP nol');
+  });
+
+  uji('saldo galon beredar hanya menghitung yang positif', () => {
+    const d = panggil(konteks, 'dashboard.summary', {}, tokenAdmin).data;
+    harus(d.galon.customer.every((c) => c.saldo > 0),
+      'saldo nol atau minus tidak boleh masuk daftar');
+    harusSama(
+      d.galon.customer.reduce((s, c) => s + c.saldo, 0) <= d.galon.total_beredar,
+      true, 'total harus mencakup seluruh customer');
+  });
+
+  console.log('\n--- Pemeriksa integritas ---');
+
+  uji('data hasil migrasi lolos tanpa temuan parah', () => {
+    const r = panggil(konteks, 'system.integrity', {}, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.jumlah.parah, 0,
+      `temuan parah: ${r.data.temuan.filter((t) => t.tingkat === 'parah')
+        .map((t) => t.kode).join(', ')}`);
+  });
+
+  uji('sales ditolak menjalankan pemeriksa integritas', () => {
+    const r = panggil(konteks, 'system.integrity', {}, tokenSales);
+    harusSama(r.error.code, 'FORBIDDEN', 'kode error');
+  });
+
+  uji('penjualan yang disisipkan manual terdeteksi', () => {
+    // Tiru persis apa yang terjadi kalau baris ditambahkan langsung di
+    // spreadsheet: order dan item ada, mutasi barang keluar tidak.
+    const tambah = vm.runInContext('tambahBaris', konteks);
+    tambah('sales_orders', [{
+      order_id: 'ORD90001', invoice_no: 'INV2608900', order_date: '2026-08-05',
+      customer_code: '01C25BLL', due_date: '2026-09-04', status: 'unpaid',
+      subtotal: 150000, created_by: 'disisipkan_manual', created_at: '2026-08-05 10:00:00',
+    }]);
+    tambah('sales_order_items', [{
+      item_id: 'ITM90001', order_id: 'ORD90001', product_code: 'GD19',
+      qty: 10, unit_price: 15000, unit_cogs: 12000, line_total: 150000,
+    }]);
+
+    const r = panggil(konteks, 'system.integrity', {}, tokenAdmin);
+    const temuan = r.data.temuan.find((t) => t.kode === 'DIBUAT_DI_LUAR_SISTEM');
+    harus(temuan, 'penyisipan manual harus terdeteksi');
+    harus(temuan.contoh.some((c) => c.includes('INV2608900')),
+      `invoice yang disisipkan tidak disebut: ${temuan.contoh.join(', ')}`);
+  });
+
+  uji('perbaikan otomatis membuatkan mutasi yang hilang', () => {
+    const r = panggil(konteks, 'system.integrity', { perbaiki_stok: true }, tokenAdmin);
+    harus(r.ok, 'perbaikan gagal');
+    harus(r.data.diperbaiki, 'tidak ada laporan perbaikan');
+    harus(r.data.diperbaiki.invoice_diperbaiki.includes('INV2608900'),
+      'invoice sisipan tidak ikut diperbaiki');
+
+    // Setelah diperbaiki, temuan yang sama tidak boleh muncul lagi.
+    const ulang = panggil(konteks, 'system.integrity', {}, tokenAdmin);
+    harus(!ulang.data.temuan.some((t) => t.kode === 'DIBUAT_DI_LUAR_SISTEM'),
+      'temuan masih muncul setelah diperbaiki');
+  });
+
+  uji('mutasi perbaikan memakai tanggal penjualannya, bukan hari ini', () => {
+    const bacaT = vm.runInContext('bacaTabel', konteks);
+    const m = bacaT('stock_movements').filter((x) => x.ref_id === 'ORD90001');
+    harusSama(m.length, 1, 'jumlah mutasi perbaikan');
+    harusSama(String(m[0].moved_at), '2026-08-05',
+      'tanggal mutasi harus mengikuti tanggal penjualan agar laporan periode benar');
+    harusSama(keAngka(m[0].qty), -10, 'arah mutasi harus keluar');
+  });
+
+  uji('ID kembar terdeteksi', () => {
+    const tambah = vm.runInContext('tambahBaris', konteks);
+    tambah('sales_orders', [{
+      order_id: 'ORD90001', invoice_no: 'INV2608901', order_date: '2026-08-05',
+      customer_code: '01C25BLL', due_date: '2026-09-04', status: 'unpaid',
+      subtotal: 1000, created_by: 'disisipkan_manual', created_at: '2026-08-05 10:00:00',
+    }]);
+    const r = panggil(konteks, 'system.integrity', {}, tokenAdmin);
+    harus(r.data.temuan.some((t) => t.kode === 'ID_KEMBAR'), 'ID kembar tidak terdeteksi');
+    harusSama(r.data.jumlah.parah > 0, true, 'harus dinilai parah');
+  });
+
+  uji('subtotal yang tidak cocok dengan itemnya terdeteksi', () => {
+    const r = panggil(konteks, 'system.integrity', {}, tokenAdmin);
+    const t = r.data.temuan.find((x) => x.kode === 'SUBTOTAL_TIDAK_COCOK');
+    harus(t, 'selisih subtotal tidak terdeteksi');
+    harus(t.contoh.some((c) => c.includes('INV2608901')), 'invoice janggal tidak disebut');
+  });
+
+  uji('stok minus tidak dilaporkan sebagai masalah', () => {
+    // Pada model pre-order, saldo minus adalah kondisi normal sampai batch
+    // produksi dicatat di Fase 4. Melaporkannya akan menyalakan peringatan
+    // untuk setiap produk setiap hari.
+    const r = panggil(konteks, 'system.integrity', {}, tokenAdmin);
+    harus(!r.data.temuan.some((t) => t.kode === 'STOK_NEGATIF'),
+      'stok minus tidak boleh jadi temuan pada model pre-order');
   });
 
   // -------------------------------------------------------------------------

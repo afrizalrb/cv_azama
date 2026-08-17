@@ -189,7 +189,8 @@ export default function SalesEntry() {
                     </select>
                     {p && (
                       <span className="mt-1 block text-xs text-slate-400">
-                        stok tercatat {p.stok.toLocaleString('id-ID')}
+                        {p.packaging_type}
+                        {p.volume_ml ? ` · ${(p.volume_ml / 1000).toLocaleString('id-ID')} liter` : ''}
                       </span>
                     )}
                   </Sel>

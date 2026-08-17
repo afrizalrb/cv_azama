@@ -480,10 +480,24 @@ ini setiap kali dijalankan.
 |---|---|:--:|
 | 0 | Fondasi: skema, Sheets.gs, Auth.gs, router, migrasi, README | selesai |
 | 1 | Penjualan: `sales.*`, master produk & customer, Login, SalesEntry, SalesList | selesai |
-| 2 | Dashboard & Stok: `dashboard.*`, `stock.*` | — |
+| 2 | Dashboard & pemeriksa integritas | selesai |
 | 3 | Piutang & Galon: `payment.*`, `receivable.aging`, `gallon.*` | — |
 | 4 | Produksi, Bahan, Biaya: `production.*`, `expense.*`, laporan laba bersih | — |
 | 5 | Manajemen user: `user.*`, pengetatan role menyeluruh | — |
+
+**Modul stok sengaja tidak dibangun.** Model bisnisnya pre-order: produksi
+mengikuti pesanan yang masuk, tidak ada penyetokan barang jadi. Angka stok
+akan selalu mendekati nol lalu minus, dan alert stok minimum hanya akan
+menyalakan peringatan palsu setiap hari sampai orang berhenti membacanya.
+
+Buku besar `stock_movements` tetap diisi setiap penjualan sebagai riwayat
+barang keluar, hanya tidak ditampilkan. Begitu batch produksi dicatat di
+Fase 4, produksi masuk akan otomatis mengimbanginya tanpa perlu membangun
+ulang apa pun.
+
+Yang tetap dilacak adalah **galon kosong di tangan customer**. Itu bukan
+persediaan barang jadi melainkan aset fisik milik perusahaan yang bisa hilang,
+dan saldonya muncul di Dashboard sebagai indikator risiko.
 
 ---
 

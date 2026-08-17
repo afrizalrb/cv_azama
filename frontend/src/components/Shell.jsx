@@ -40,17 +40,22 @@ function bungkus(d) {
 const IkonDashboard = bungkus('M3 13h8V3H3v10Zm10 8h8V11h-8v10ZM3 21h8v-6H3v6ZM13 9h8V3h-8v6Z')
 const IkonPenjualan = bungkus('M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9h6m-6 4h4')
 const IkonPiutang = bungkus('M12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2m0-8c1.3 0 2.4.5 2.8 1.3M12 8V6m0 10v2m0-2c-1.3 0-2.4-.5-2.8-1.3M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z')
-const IkonStok = bungkus('M20 7 12 3 4 7m16 0-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4')
 const IkonGalon = bungkus('M8 3h8M9 3v3.5L6.5 10A4 4 0 0 0 6 12v7a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-7a4 4 0 0 0-.5-2L15 6.5V3M6 15h12')
 const IkonProduksi = bungkus('M4 20h16M5 20V9l5 3.5V9l5 3.5V6l4 2.5V20')
 const IkonBiaya = bungkus('M3 6h18M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6M3 6l2-3h14l2 3M9 11h6')
 const IkonMaster = bungkus('M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Zm0 0v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3')
 
+/**
+ * Tidak ada menu Stok.
+ *
+ * Model bisnisnya pre-order: produksi mengikuti pesanan yang masuk, tidak ada
+ * penyetokan barang jadi. Mutasi barang keluar tetap dicatat di buku besar
+ * sebagai riwayat, tapi tidak ada angka stok yang bermakna untuk ditampilkan.
+ */
 const MENU = [
-  { ke: '/dashboard', label: 'Dashboard', ikon: IkonDashboard, roles: ['admin', 'sales'], segera: true },
+  { ke: '/dashboard', label: 'Dashboard', ikon: IkonDashboard, roles: ['admin', 'sales'] },
   { ke: '/penjualan', label: 'Penjualan', ikon: IkonPenjualan, roles: ['admin', 'sales'] },
   { ke: '/piutang', label: 'Piutang', ikon: IkonPiutang, roles: ['admin', 'sales'], segera: true },
-  { ke: '/stok', label: 'Stok', ikon: IkonStok, roles: ['admin', 'produksi'], segera: true },
   { ke: '/galon', label: 'Galon', ikon: IkonGalon, roles: ['admin', 'sales', 'produksi'], segera: true },
   { ke: '/produksi', label: 'Produksi', ikon: IkonProduksi, roles: ['admin', 'produksi'], segera: true },
   { ke: '/biaya', label: 'Biaya', ikon: IkonBiaya, roles: ['admin'], segera: true },

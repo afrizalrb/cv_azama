@@ -59,8 +59,14 @@ var RUTE = {
   'master.customerPrices.list':  { fn: masterCustomerPricesList,  roles: ['admin', 'sales'] },
   'master.customerPrices.upsert':{ fn: masterCustomerPricesUpsert, roles: ['admin'] },
 
+  // --- dashboard ---
+  // Satu action mengembalikan seluruh isi halaman depan. Isinya disaring
+  // per role: sales hanya menerima angka customer-nya sendiri, tanpa margin.
+  'dashboard.summary':    { fn: dashboardSummary,  roles: ['admin', 'sales'] },
+
   // --- sistem ---
-  'system.diagnostics':   { fn: aksiDiagnostics,   roles: ['admin'] }
+  'system.diagnostics':   { fn: aksiDiagnostics,   roles: ['admin'] },
+  'system.integrity':     { fn: systemIntegrity,   roles: ['admin'] }
 };
 
 

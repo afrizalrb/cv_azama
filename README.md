@@ -86,6 +86,10 @@ cv_azama/
 │   ├── Sales.gs            sales.create/list/get/cancel — validasi di depan,
 │   │                       penulisan di belakang, rollback bila gagal
 │   ├── Master.gs           Produk, customer, harga khusus
+│   ├── Payment.gs          Pembayaran dan aging piutang
+│   ├── Gallon.gs           Buku besar galon fisik di tangan customer
+│   ├── Dashboard.gs        Agregasi halaman depan, satu panggilan
+│   ├── Integrity.gs        Pemeriksa keutuhan data
 │   ├── Setup.gs            Fungsi sekali jalan: buat tab, verifikasi data
 │   └── Code.gs             Router doPost — tabel rute dan penegakan akses
 │
@@ -481,7 +485,7 @@ ini setiap kali dijalankan.
 | 0 | Fondasi: skema, Sheets.gs, Auth.gs, router, migrasi, README | selesai |
 | 1 | Penjualan: `sales.*`, master produk & customer, Login, SalesEntry, SalesList | selesai |
 | 2 | Dashboard & pemeriksa integritas | selesai |
-| 3 | Piutang & Galon: `payment.*`, `receivable.aging`, `gallon.*` | — |
+| 3 | Piutang & Galon: `payment.*`, `receivable.aging`, `gallon.*` | selesai |
 | 4 | Produksi, Bahan, Biaya: `production.*`, `expense.*`, laporan laba bersih | — |
 | 5 | Manajemen user: `user.*`, pengetatan role menyeluruh | — |
 

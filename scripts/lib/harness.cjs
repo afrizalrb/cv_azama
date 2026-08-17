@@ -267,7 +267,8 @@ function simpanSpreadsheet(ss, dir) {
  */
 function muatKodeGs(konteks) {
   const urutan = ['Sheets.gs', 'Auth.gs', 'Sales.gs', 'Master.gs',
-                  'Dashboard.gs', 'Integrity.gs', 'Setup.gs', 'Code.gs'];
+                  'Payment.gs', 'Gallon.gs', 'Dashboard.gs', 'Integrity.gs',
+                  'Setup.gs', 'Code.gs'];
   for (const berkas of urutan) {
     const jalur = path.join(DIR_GS, berkas);
     if (!fs.existsSync(jalur)) throw new Error(`Berkas hilang: ${berkas}`);

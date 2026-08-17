@@ -153,9 +153,14 @@ export default function SalesDetail() {
               <p className="mt-2 text-2xl font-bold tabular-nums text-amber-700">
                 {rupiah(data.sisa)}
               </p>
-              <p className="text-sm text-slate-400">
-                belum tertagih · pencatatan pembayaran menyusul di Fase 3
-              </p>
+              <p className="text-sm text-slate-400">belum tertagih</p>
+              {!batal && (
+                <div className="mt-4">
+                  <Tombol onClick={() => navigate('/piutang')}>
+                    Catat pembayaran
+                  </Tombol>
+                </div>
+              )}
             </div>
           ) : (
             <dl className="space-y-2 text-sm">

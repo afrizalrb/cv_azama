@@ -55,8 +55,8 @@ const IkonMaster = bungkus('M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Zm
 const MENU = [
   { ke: '/dashboard', label: 'Dashboard', ikon: IkonDashboard, roles: ['admin', 'sales'] },
   { ke: '/penjualan', label: 'Penjualan', ikon: IkonPenjualan, roles: ['admin', 'sales'] },
-  { ke: '/piutang', label: 'Piutang', ikon: IkonPiutang, roles: ['admin', 'sales'], segera: true },
-  { ke: '/galon', label: 'Galon', ikon: IkonGalon, roles: ['admin', 'sales', 'produksi'], segera: true },
+  { ke: '/piutang', label: 'Piutang', ikon: IkonPiutang, roles: ['admin', 'sales'] },
+  { ke: '/galon', label: 'Galon', ikon: IkonGalon, roles: ['admin', 'sales', 'produksi'] },
   { ke: '/produksi', label: 'Produksi', ikon: IkonProduksi, roles: ['admin', 'produksi'], segera: true },
   { ke: '/biaya', label: 'Biaya', ikon: IkonBiaya, roles: ['admin'], segera: true },
   { ke: '/master', label: 'Master', ikon: IkonMaster, roles: ['admin', 'sales'] },

@@ -7,6 +7,8 @@ import SalesList from './pages/SalesList'
 import SalesEntry from './pages/SalesEntry'
 import SalesDetail from './pages/SalesDetail'
 import Masters from './pages/Masters'
+import Receivables from './pages/Receivables'
+import Gallon from './pages/Gallon'
 import Akun from './pages/Akun'
 import { Kartu, JudulHalaman, Tombol, SedangMemuat } from './components/ui'
 
@@ -48,6 +50,8 @@ export default function App() {
         <Route path="/penjualan/baru" element={<Terlindungi roles={['admin', 'sales']}><SalesEntry /></Terlindungi>} />
         <Route path="/penjualan/:orderId" element={<Terlindungi roles={['admin', 'sales']}><SalesDetail /></Terlindungi>} />
 
+        <Route path="/piutang" element={<Terlindungi roles={['admin', 'sales']}><Receivables /></Terlindungi>} />
+        <Route path="/galon" element={<Terlindungi roles={['admin', 'sales', 'produksi']}><Gallon /></Terlindungi>} />
         <Route path="/master" element={<Terlindungi roles={['admin', 'sales']}><Masters /></Terlindungi>} />
         <Route path="/akun" element={<Terlindungi><Akun /></Terlindungi>} />
 

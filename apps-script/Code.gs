@@ -59,6 +59,19 @@ var RUTE = {
   'master.customerPrices.list':  { fn: masterCustomerPricesList,  roles: ['admin', 'sales'] },
   'master.customerPrices.upsert':{ fn: masterCustomerPricesUpsert, roles: ['admin'] },
 
+  // --- pembayaran & piutang ---
+  'payment.create':       { fn: paymentCreate,     roles: ['admin', 'sales'] },
+  'payment.reverse':      { fn: paymentReverse,    roles: ['admin'] },
+  'payment.listByOrder':  { fn: paymentListByOrder, roles: ['admin', 'sales'] },
+  'receivable.aging':     { fn: receivableAging,   roles: ['admin', 'sales'] },
+
+  // --- galon ---
+  // Produksi ikut boleh mencatat retur karena merekalah yang menerima galon
+  // kosong kembali di pabrik.
+  'gallon.balance':       { fn: gallonBalance,     roles: ['admin', 'sales', 'produksi'] },
+  'gallon.return':        { fn: gallonReturn,      roles: ['admin', 'sales', 'produksi'] },
+  'gallon.movements':     { fn: gallonMovements,   roles: ['admin', 'sales', 'produksi'] },
+
   // --- dashboard ---
   // Satu action mengembalikan seluruh isi halaman depan. Isinya disaring
   // per role: sales hanya menerima angka customer-nya sendiri, tanpa margin.

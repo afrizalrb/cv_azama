@@ -129,8 +129,8 @@ function main() {
   uji('action yang belum dibangun tidak diam-diam lolos', () => {
     // Rute Fase 2 ke atas belum ada. Yang penting: ditolak sebagai action
     // tak dikenal, bukan gagal dengan error internal yang membingungkan.
-    ['payment.create', 'receivable.aging', 'gallon.balance',
-     'production.create', 'expense.create', 'user.list', 'stock.current']
+    ['production.create', 'production.list', 'expense.create', 'expense.list',
+     'user.list', 'user.upsert', 'stock.current', 'master.materials.list']
       .forEach((aksi) => {
         const r = panggil(konteks, aksi, {}, tokenAdmin);
         harusSama(r.error.code, 'UNKNOWN_ACTION', `${aksi} harus UNKNOWN_ACTION`);
@@ -651,6 +651,250 @@ function main() {
     ['auth.login', 'sales.create', 'sales.cancel'].forEach(a => {
       harus(aksi.has(a), `aksi ${a} tidak tercatat`);
     });
+  });
+
+  console.log('\n--- Pembayaran (Fase 3) ---');
+
+  let invoiceUji = null;
+
+  uji('penjualan baru berstatus unpaid dan muncul di aging', () => {
+    const r = panggil(konteks, 'sales.create', {
+      customer_code: '01C25BLL',
+      order_date: '2026-06-01',       // sudah lewat jatuh tempo 30 hari
+      items: [{ product_code: 'GD19', qty: 20 }],
+    }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    invoiceUji = r.data;
+    harusSama(r.data.status, 'unpaid', 'status awal');
+
+    const a = panggil(konteks, 'receivable.aging', {}, tokenAdmin);
+    harus(a.ok, 'aging gagal');
+    harus(a.data.ringkasan.total_piutang >= 300000,
+      `piutang harus memuat invoice baru, dapat ${a.data.ringkasan.total_piutang}`);
+  });
+
+  uji('invoice lunas hasil migrasi tidak masuk aging', () => {
+    const a = panggil(konteks, 'receivable.aging', {}, tokenAdmin).data;
+    harus(a.invoice_dikecualikan >= 111,
+      `harusnya 111+ invoice dikecualikan, dapat ${a.invoice_dikecualikan}`);
+    harus(a.catatan_pengecualian.length > 0, 'alasan pengecualian harus dijelaskan');
+    // Kalau pengecualian ini bocor, seluruh omzet dua tahun muncul sebagai tunggakan.
+    harus(a.ringkasan.total_piutang < 5000000,
+      `piutang membengkak: ${a.ringkasan.total_piutang}`);
+  });
+
+  uji('umur dihitung dari jatuh tempo, bukan tanggal invoice', () => {
+    const a = panggil(konteks, 'receivable.aging', { per_tanggal: '2026-08-01' }, tokenAdmin).data;
+    const c = a.customer.find((x) => x.code === '01C25BLL');
+    const inv = c.invoice.find((x) => x.invoice_no === invoiceUji.invoice_no);
+    // order 2026-06-01, tempo 30 hari -> jatuh tempo 2026-07-01
+    // per 2026-08-01 berarti terlambat 31 hari, bukan 61.
+    harusSama(inv.due_date, '2026-07-01', 'jatuh tempo');
+    harusSama(inv.umur_hari, 31, 'umur keterlambatan');
+    harusSama(inv.ember, 'h31_60', 'ember aging');
+  });
+
+  uji('pembayaran sebagian mengubah status jadi partial', () => {
+    const r = panggil(konteks, 'payment.create', {
+      order_id: invoiceUji.order_id,
+      payment_date: '2026-07-15',
+      amount: 100000,
+      method: 'transfer',
+      reference: 'BCA uji',
+    }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.status, 'partial', 'status setelah bayar sebagian');
+    harusSama(r.data.sisa, invoiceUji.subtotal - 100000, 'sisa tagihan');
+  });
+
+  uji('pembayaran melebihi sisa tagihan ditolak', () => {
+    const r = panggil(konteks, 'payment.create', {
+      order_id: invoiceUji.order_id, amount: 99999999,
+    }, tokenAdmin);
+    harus(!r.ok, 'harus ditolak');
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('pelunasan mengubah status jadi paid dan keluar dari aging', () => {
+    const sisa = invoiceUji.subtotal - 100000;
+    const r = panggil(konteks, 'payment.create', {
+      order_id: invoiceUji.order_id, amount: sisa, method: 'tunai',
+    }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.status, 'paid', 'status setelah lunas');
+    harusSama(r.data.sisa, 0, 'sisa harus nol');
+
+    const a = panggil(konteks, 'receivable.aging', {}, tokenAdmin).data;
+    const c = a.customer.find((x) => x.code === '01C25BLL');
+    const masih = c && c.invoice.some((x) => x.invoice_no === invoiceUji.invoice_no);
+    harus(!masih, 'invoice lunas masih muncul di aging');
+  });
+
+  uji('pembayaran mendahului tanggal invoice ditolak', () => {
+    const baru = panggil(konteks, 'sales.create', {
+      customer_code: '01C25BLL', order_date: '2026-07-01',
+      items: [{ product_code: 'GD19', qty: 1 }],
+    }, tokenAdmin).data;
+    const r = panggil(konteks, 'payment.create', {
+      order_id: baru.order_id, payment_date: '2026-06-01', amount: 1000,
+    }, tokenAdmin);
+    harus(!r.ok, 'harus ditolak');
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('pembayaran atas invoice lunas hasil migrasi ditolak', () => {
+    // Tanpa penjagaan ini, mencatat pembayaran di atas invoice migrasi akan
+    // langsung terlihat sebagai lebih bayar sebesar seluruh nilai invoice.
+    const semua = panggil(konteks, 'sales.list', { status: 'paid' }, tokenAdmin).data;
+    // Hindari INV2511020 yang bertanggal masa depan — validasi tanggal akan
+    // menyala lebih dulu dan yang diuji di sini bukan itu.
+    const migrasi = semua.daftar.find(
+      (o) => o.dibayar === 0 && o.order_date <= '2026-08-17');
+    const r = panggil(konteks, 'payment.create',
+      { order_id: migrasi.order_id, amount: 1000 }, tokenAdmin);
+    harus(!r.ok, 'harus ditolak');
+    harus(/migrasi/i.test(r.error.message), `pesan harus menjelaskan sebabnya: ${r.error.message}`);
+  });
+
+  uji('pembatalan pembayaran ditulis sebagai baris negatif', () => {
+    const daftar = panggil(konteks, 'payment.listByOrder',
+      { order_id: invoiceUji.order_id }, tokenAdmin).data;
+    const pertama = daftar.daftar[0];
+
+    const r = panggil(konteks, 'payment.reverse',
+      { payment_id: pertama.payment_id, alasan: 'salah invoice' }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.status, 'partial', 'status kembali ke partial');
+
+    const sesudah = panggil(konteks, 'payment.listByOrder',
+      { order_id: invoiceUji.order_id }, tokenAdmin).data;
+    harusSama(sesudah.daftar.length, 3, 'baris asli harus tetap ada, ditambah penyeimbang');
+    harus(sesudah.daftar.some((b) => b.amount < 0), 'baris negatif tidak ada');
+    harusSama(sesudah.total_dibayar, invoiceUji.subtotal - 100000, 'total setelah dibatalkan');
+  });
+
+  uji('pembatalan pembayaran dua kali ditolak', () => {
+    const daftar = panggil(konteks, 'payment.listByOrder',
+      { order_id: invoiceUji.order_id }, tokenAdmin).data;
+    const pertama = daftar.daftar.find((b) => b.amount > 0);
+    const r = panggil(konteks, 'payment.reverse',
+      { payment_id: pertama.payment_id, alasan: 'coba lagi' }, tokenAdmin);
+    harus(!r.ok, 'harus ditolak');
+  });
+
+  uji('sales ditolak membatalkan pembayaran', () => {
+    const daftar = panggil(konteks, 'payment.listByOrder',
+      { order_id: invoiceUji.order_id }, tokenAdmin).data;
+    const r = panggil(konteks, 'payment.reverse',
+      { payment_id: daftar.daftar[1].payment_id, alasan: 'x' }, tokenSales);
+    harusSama(r.error.code, 'FORBIDDEN', 'kode error');
+  });
+
+  uji('aging sales hanya memuat customer miliknya', () => {
+    const a = panggil(konteks, 'receivable.aging', {}, tokenSales);
+    harus(a.ok, 'aging sales gagal');
+    const asing = a.data.customer.filter((c) => c.sales_person !== 'Zhulham');
+    harusSama(asing.length, 0, `bocor: ${asing.map((c) => c.code).join(', ')}`);
+  });
+
+  uji('ember aging berjumlah sama dengan total piutang', () => {
+    const a = panggil(konteks, 'receivable.aging', {}, tokenAdmin).data;
+    const jumlahEmber = a.ember.reduce((s, e) => s + e.nilai, 0);
+    harusSama(Math.round(jumlahEmber), Math.round(a.ringkasan.total_piutang),
+      'jumlah ember harus sama dengan total');
+  });
+
+  console.log('\n--- Galon (Fase 3) ---');
+
+  uji('penjualan galon menambah saldo customer', () => {
+    const b = panggil(konteks, 'gallon.balance', { customer_code: '01C25BLL' }, tokenAdmin);
+    harus(b.ok, 'gagal ambil saldo');
+    const c = b.data.customer[0];
+    harus(c.saldo > 0, `saldo harus positif, dapat ${c.saldo}`);
+    harus(c.per_produk.some((x) => x.product_code === 'GD19'), 'rincian per produk kosong');
+  });
+
+  uji('retur galon mengurangi saldo', () => {
+    const sebelum = panggil(konteks, 'gallon.balance',
+      { customer_code: '01C25BLL' }, tokenAdmin).data.customer[0].saldo;
+
+    const r = panggil(konteks, 'gallon.return', {
+      customer_code: '01C25BLL',
+      jenis: 'gallon_return',
+      items: [{ product_code: 'GD19', qty: 5 }],
+      notes: 'diambil sopir',
+    }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.total_qty, 5, 'jumlah dikembalikan');
+
+    const sesudah = panggil(konteks, 'gallon.balance',
+      { customer_code: '01C25BLL' }, tokenAdmin).data.customer[0].saldo;
+    harusSama(sesudah, sebelum - 5, 'saldo setelah retur');
+  });
+
+  uji('retur melebihi yang dipegang ditolak', () => {
+    const r = panggil(konteks, 'gallon.return', {
+      customer_code: '01C25BLL',
+      items: [{ product_code: 'GD19', qty: 99999 }],
+    }, tokenAdmin);
+    harus(!r.ok, 'harus ditolak');
+    harus(/memegang/.test(r.error.message),
+      `pesan harus menyebut saldo yang dipegang: ${r.error.message}`);
+  });
+
+  uji('galon hilang memotong deposit, galon kembali tidak', () => {
+    // GD19 deposit_amount masih nol di data awal, jadi yang diuji adalah
+    // perbedaan perlakuannya, bukan besaran nominalnya.
+    const kembali = panggil(konteks, 'gallon.return', {
+      customer_code: '01C25BLL', jenis: 'gallon_return',
+      items: [{ product_code: 'GD19', qty: 1 }],
+    }, tokenAdmin).data;
+    harusSama(kembali.total_deposit, 0, 'galon kembali tidak memotong deposit');
+
+    const hilang = panggil(konteks, 'gallon.return', {
+      customer_code: '01C25BLL', jenis: 'lost',
+      items: [{ product_code: 'GD19', qty: 1 }],
+    }, tokenAdmin);
+    harus(hilang.ok, `gagal: ${hilang.ok ? '' : hilang.error.message}`);
+    harusSama(hilang.data.jenis_label, 'Hilang', 'label jenis');
+  });
+
+  uji('produk non-galon ditolak untuk retur', () => {
+    const tambah = vm.runInContext('tambahBaris', konteks);
+    tambah('products', [{
+      code: 'BOTOL1', name: 'Botol uji', packaging_type: 'Botol', volume_ml: 600,
+      cogs: 1000, price: 2000, min_stock: 0, is_returnable: false,
+      deposit_amount: 0, is_active: true,
+    }]);
+    const r = panggil(konteks, 'gallon.return', {
+      customer_code: '01C25BLL', items: [{ product_code: 'BOTOL1', qty: 1 }],
+    }, tokenAdmin);
+    harus(!r.ok, 'harus ditolak');
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('gallon.movements mencatat seluruh jenis mutasi', () => {
+    const m = panggil(konteks, 'gallon.movements',
+      { customer_code: '01C25BLL' }, tokenAdmin);
+    harus(m.ok, 'gagal ambil mutasi');
+    const jenis = new Set(m.data.daftar.map((x) => x.movement_type));
+    harus(jenis.has('gallon_out'), 'mutasi keluar tidak ada');
+    harus(jenis.has('gallon_return'), 'mutasi kembali tidak ada');
+    harus(jenis.has('lost'), 'mutasi hilang tidak ada');
+  });
+
+  uji('produksi boleh mencatat retur galon', () => {
+    const t = panggil(konteks, 'auth.login',
+      { username: 'produksi', password: 'PasswordBaru123' }).data.token;
+    const r = panggil(konteks, 'gallon.balance', {}, t);
+    harus(r.ok, `produksi harus boleh melihat saldo galon: ${r.ok ? '' : r.error.message}`);
+  });
+
+  uji('produksi ditolak membuka daftar penjualan', () => {
+    const t = panggil(konteks, 'auth.login',
+      { username: 'produksi', password: 'PasswordBaru123' }).data.token;
+    const r = panggil(konteks, 'sales.list', {}, t);
+    harusSama(r.error.code, 'FORBIDDEN', 'kode error');
   });
 
   console.log('\n--- Dashboard (Fase 2) ---');

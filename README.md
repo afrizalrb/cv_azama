@@ -88,6 +88,9 @@ cv_azama/
 │   ├── Master.gs           Produk, customer, harga khusus
 │   ├── Payment.gs          Pembayaran dan aging piutang
 │   ├── Gallon.gs           Buku besar galon fisik di tangan customer
+│   ├── Production.gs       Batch produksi, rekam jejak pH dan TDS
+│   ├── Expense.gs          Biaya operasional dan laporan laba rugi
+│   ├── User.gs             Manajemen pengguna, admin saja
 │   ├── Dashboard.gs        Agregasi halaman depan, satu panggilan
 │   ├── Integrity.gs        Pemeriksa keutuhan data
 │   ├── Setup.gs            Fungsi sekali jalan: buat tab, verifikasi data
@@ -486,8 +489,10 @@ ini setiap kali dijalankan.
 | 1 | Penjualan: `sales.*`, master produk & customer, Login, SalesEntry, SalesList | selesai |
 | 2 | Dashboard & pemeriksa integritas | selesai |
 | 3 | Piutang & Galon: `payment.*`, `receivable.aging`, `gallon.*` | selesai |
-| 4 | Produksi, Bahan, Biaya: `production.*`, `expense.*`, laporan laba bersih | — |
-| 5 | Manajemen user: `user.*`, pengetatan role menyeluruh | — |
+| 4 | Produksi, Bahan, Biaya: `production.*`, `expense.*`, laporan laba bersih | selesai |
+| 5 | Manajemen user: `user.*`, pengetatan role menyeluruh | selesai |
+
+Seluruh fase blueprint sudah terpasang dan tayang.
 
 **Modul stok sengaja tidak dibangun.** Model bisnisnya pre-order: produksi
 mengikuti pesanan yang masuk, tidak ada penyetokan barang jadi. Angka stok

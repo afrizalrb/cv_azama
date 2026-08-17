@@ -58,6 +58,24 @@ var RUTE = {
   'master.customers.upsert':     { fn: masterCustomersUpsert,     roles: ['admin'] },
   'master.customerPrices.list':  { fn: masterCustomerPricesList,  roles: ['admin', 'sales'] },
   'master.customerPrices.upsert':{ fn: masterCustomerPricesUpsert, roles: ['admin'] },
+  'master.materials.list':       { fn: masterMaterialsList,       roles: ['admin', 'produksi'] },
+  'master.materials.upsert':     { fn: masterMaterialsUpsert,     roles: ['admin'] },
+  'master.suppliers.list':       { fn: masterSuppliersList,       roles: ['admin', 'produksi'] },
+  'master.suppliers.upsert':     { fn: masterSuppliersUpsert,     roles: ['admin'] },
+
+  // --- produksi ---
+  'production.create':    { fn: productionCreate,   roles: ['admin', 'produksi'] },
+  'production.list':      { fn: productionList,     roles: ['admin', 'produksi'] },
+
+  // --- biaya operasional ---
+  'expense.create':       { fn: expenseCreate,      roles: ['admin'] },
+  'expense.list':         { fn: expenseList,        roles: ['admin'] },
+  'expense.reverse':      { fn: expenseReverse,     roles: ['admin'] },
+  'report.profitLoss':    { fn: reportProfitLoss,   roles: ['admin'] },
+
+  // --- pengguna ---
+  'user.list':            { fn: userList,           roles: ['admin'] },
+  'user.upsert':          { fn: userUpsert,         roles: ['admin'] },
 
   // --- pembayaran & piutang ---
   'payment.create':       { fn: paymentCreate,     roles: ['admin', 'sales'] },

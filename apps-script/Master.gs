@@ -320,6 +320,131 @@ function masterCustomerPricesList(payload, sesi) {
 }
 
 
+// ---------------------------------------------------------------------------
+// Bahan baku
+// ---------------------------------------------------------------------------
+
+/**
+ * master.materials.list
+ *
+ * Sengaja tanpa saldo persediaan. Model bisnisnya pre-order, dan STOK_BAHAN
+ * di Excel lama pun hanya berisi nama item tanpa satu pun angka — jumlah
+ * bahan memang tidak pernah dilacak. Yang berguna sekarang adalah daftar
+ * bakunya: nama, satuan, dan pemasoknya, supaya pembelian bisa dicatat
+ * dengan istilah yang seragam.
+ */
+function masterMaterialsList(payload, sesi) {
+  var daftar = bacaTabel('materials').map(function (m) {
+    return {
+      code: keTeks_(m.code).toUpperCase(),
+      name: keTeks_(m.name),
+      unit: keTeks_(m.unit),
+      min_stock: keAngka_(m.min_stock)
+    };
+  });
+  daftar.sort(function (a, b) { return a.code < b.code ? -1 : 1; });
+  return { daftar: daftar, jumlah: daftar.length };
+}
+
+
+/** master.materials.upsert — admin saja. */
+function masterMaterialsUpsert(payload, sesi) {
+  var p = payload || {};
+  var kode = keTeks_(p.code).toUpperCase();
+  var nama = keTeks_(p.name);
+
+  if (!kode) throw errorApp('BAD_REQUEST', 'Kode bahan wajib diisi.');
+  if (!/^[A-Z0-9]{2,12}$/.test(kode)) {
+    throw errorApp('BAD_REQUEST',
+      'Kode bahan hanya boleh huruf besar dan angka, 2 sampai 12 karakter.');
+  }
+  if (!nama) throw errorApp('BAD_REQUEST', 'Nama bahan wajib diisi.');
+
+  return denganKunci(function () {
+    var nilai = {
+      code: kode,
+      name: nama,
+      unit: keTeks_(p.unit) || 'pcs',
+      min_stock: Math.round(keAngka_(p.min_stock))
+    };
+
+    if (cariBaris('materials', 'code', kode)) {
+      perbaruiBaris('materials', 'code', kode,
+        { name: nilai.name, unit: nilai.unit, min_stock: nilai.min_stock });
+      catatAudit(sesi, 'master.materials.upsert', { code: kode }, 'DIPERBARUI');
+      return { code: kode, dibuat: false };
+    }
+
+    tambahBaris('materials', [nilai]);
+    catatAudit(sesi, 'master.materials.upsert', { code: kode }, 'DIBUAT');
+    return { code: kode, dibuat: true };
+  });
+}
+
+
+// ---------------------------------------------------------------------------
+// Supplier
+// ---------------------------------------------------------------------------
+
+/** master.suppliers.list */
+function masterSuppliersList(payload, sesi) {
+  var daftar = bacaTabel('suppliers').map(function (s) {
+    return {
+      code: keTeks_(s.code).toUpperCase(),
+      name: keTeks_(s.name),
+      address: keTeks_(s.address),
+      phone: keTeks_(s.phone),
+      payment_term_days: Math.round(keAngka_(s.payment_term_days))
+    };
+  });
+  daftar.sort(function (a, b) { return a.code < b.code ? -1 : 1; });
+  return { daftar: daftar, jumlah: daftar.length };
+}
+
+
+/** master.suppliers.upsert — admin saja. */
+function masterSuppliersUpsert(payload, sesi) {
+  var p = payload || {};
+  var kode = keTeks_(p.code).toUpperCase();
+  var nama = keTeks_(p.name);
+
+  if (!kode) throw errorApp('BAD_REQUEST', 'Kode supplier wajib diisi.');
+  if (!/^[A-Z0-9]{2,16}$/.test(kode)) {
+    throw errorApp('BAD_REQUEST',
+      'Kode supplier hanya boleh huruf besar dan angka, 2 sampai 16 karakter.');
+  }
+  if (!nama) throw errorApp('BAD_REQUEST', 'Nama supplier wajib diisi.');
+
+  var tempo = Math.round(keAngka_(p.payment_term_days));
+  if (tempo < 0 || tempo > 365) {
+    throw errorApp('BAD_REQUEST', 'Tempo pembayaran harus antara 0 dan 365 hari.');
+  }
+
+  return denganKunci(function () {
+    var nilai = {
+      code: kode,
+      name: nama,
+      address: keTeks_(p.address),
+      phone: keTeks_(p.phone),
+      payment_term_days: tempo
+    };
+
+    if (cariBaris('suppliers', 'code', kode)) {
+      perbaruiBaris('suppliers', 'code', kode, {
+        name: nilai.name, address: nilai.address,
+        phone: nilai.phone, payment_term_days: nilai.payment_term_days
+      });
+      catatAudit(sesi, 'master.suppliers.upsert', { code: kode }, 'DIPERBARUI');
+      return { code: kode, dibuat: false };
+    }
+
+    tambahBaris('suppliers', [nilai]);
+    catatAudit(sesi, 'master.suppliers.upsert', { code: kode }, 'DIBUAT');
+    return { code: kode, dibuat: true };
+  });
+}
+
+
 /** master.customerPrices.upsert — admin saja. */
 function masterCustomerPricesUpsert(payload, sesi) {
   var p = payload || {};

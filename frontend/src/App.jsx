@@ -9,6 +9,9 @@ import SalesDetail from './pages/SalesDetail'
 import Masters from './pages/Masters'
 import Receivables from './pages/Receivables'
 import Gallon from './pages/Gallon'
+import Production from './pages/Production'
+import Expenses from './pages/Expenses'
+import Users from './pages/Users'
 import Akun from './pages/Akun'
 import { Kartu, JudulHalaman, Tombol, SedangMemuat } from './components/ui'
 
@@ -52,7 +55,10 @@ export default function App() {
 
         <Route path="/piutang" element={<Terlindungi roles={['admin', 'sales']}><Receivables /></Terlindungi>} />
         <Route path="/galon" element={<Terlindungi roles={['admin', 'sales', 'produksi']}><Gallon /></Terlindungi>} />
-        <Route path="/master" element={<Terlindungi roles={['admin', 'sales']}><Masters /></Terlindungi>} />
+        <Route path="/produksi" element={<Terlindungi roles={['admin', 'produksi']}><Production /></Terlindungi>} />
+        <Route path="/biaya" element={<Terlindungi roles={['admin']}><Expenses /></Terlindungi>} />
+        <Route path="/pengguna" element={<Terlindungi roles={['admin']}><Users /></Terlindungi>} />
+        <Route path="/master" element={<Terlindungi roles={['admin', 'sales', 'produksi']}><Masters /></Terlindungi>} />
         <Route path="/akun" element={<Terlindungi><Akun /></Terlindungi>} />
 
         <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -44,6 +44,7 @@ const IkonGalon = bungkus('M8 3h8M9 3v3.5L6.5 10A4 4 0 0 0 6 12v7a2 2 0 0 0 2 2h
 const IkonProduksi = bungkus('M4 20h16M5 20V9l5 3.5V9l5 3.5V6l4 2.5V20')
 const IkonBiaya = bungkus('M3 6h18M3 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6M3 6l2-3h14l2 3M9 11h6')
 const IkonMaster = bungkus('M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Zm0 0v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3')
+const IkonPengguna = bungkus('M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1')
 
 /**
  * Tidak ada menu Stok.
@@ -57,9 +58,10 @@ const MENU = [
   { ke: '/penjualan', label: 'Penjualan', ikon: IkonPenjualan, roles: ['admin', 'sales'] },
   { ke: '/piutang', label: 'Piutang', ikon: IkonPiutang, roles: ['admin', 'sales'] },
   { ke: '/galon', label: 'Galon', ikon: IkonGalon, roles: ['admin', 'sales', 'produksi'] },
-  { ke: '/produksi', label: 'Produksi', ikon: IkonProduksi, roles: ['admin', 'produksi'], segera: true },
-  { ke: '/biaya', label: 'Biaya', ikon: IkonBiaya, roles: ['admin'], segera: true },
-  { ke: '/master', label: 'Master', ikon: IkonMaster, roles: ['admin', 'sales'] },
+  { ke: '/produksi', label: 'Produksi', ikon: IkonProduksi, roles: ['admin', 'produksi'] },
+  { ke: '/biaya', label: 'Biaya & laba', ikon: IkonBiaya, roles: ['admin'] },
+  { ke: '/master', label: 'Master', ikon: IkonMaster, roles: ['admin', 'sales', 'produksi'] },
+  { ke: '/pengguna', label: 'Pengguna', ikon: IkonPengguna, roles: ['admin'] },
 ]
 
 export default function Shell({ children }) {

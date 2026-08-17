@@ -16,8 +16,18 @@ import {
  * ditolak tidak ikut ditawarkan.
  */
 export default function Masters() {
-  const [tab, setTab] = useState('produk')
   const bolehUbah = punyaRole('admin')
+
+  // Tab disaring per role. Produksi tidak berhak melihat daftar customer,
+  // jadi menampilkan tab-nya hanya akan berujung layar galat.
+  const tabTersedia = [
+    ['produk', 'Produk', true],
+    ['customer', 'Customer', punyaRole('admin', 'sales')],
+    ['bahan', 'Bahan baku', punyaRole('admin', 'produksi')],
+    ['supplier', 'Supplier', punyaRole('admin', 'produksi')],
+  ].filter(([, , boleh]) => boleh)
+
+  const [tab, setTab] = useState(tabTersedia[0][0])
 
   return (
     <>
@@ -31,7 +41,7 @@ export default function Masters() {
       />
 
       <div className="mb-5 flex gap-1 border-b border-slate-200">
-        {[['produk', 'Produk'], ['customer', 'Customer']].map(([kunci, label]) => (
+        {tabTersedia.map(([kunci, label]) => (
           <button
             key={kunci}
             onClick={() => setTab(kunci)}
@@ -46,10 +56,188 @@ export default function Masters() {
         ))}
       </div>
 
-      {tab === 'produk'
-        ? <TabelProduk bolehUbah={bolehUbah} />
-        : <TabelCustomer bolehUbah={bolehUbah} />}
+      {tab === 'produk' && <TabelProduk bolehUbah={bolehUbah} />}
+      {tab === 'customer' && <TabelCustomer bolehUbah={bolehUbah} />}
+      {tab === 'bahan' && <TabelSederhana
+        action="master.materials"
+        judul="bahan baku"
+        bolehUbah={bolehUbah}
+        kolom={[
+          { kunci: 'code', label: 'Kode', tebal: true },
+          { kunci: 'name', label: 'Nama' },
+          { kunci: 'unit', label: 'Satuan', samar: true },
+        ]}
+        isian={[
+          { kunci: 'code', label: 'Kode bahan', kunciUtama: true,
+            keterangan: 'Huruf besar dan angka, 2–12 karakter' },
+          { kunci: 'name', label: 'Nama bahan' },
+          { kunci: 'unit', label: 'Satuan', placeholder: 'pcs' },
+        ]}
+        catatan="Daftar ini sengaja tanpa jumlah persediaan. Model bisnisnya pre-order, dan STOK_BAHAN di Excel lama pun hanya berisi nama item tanpa satu pun angka."
+      />}
+      {tab === 'supplier' && <TabelSederhana
+        action="master.suppliers"
+        judul="supplier"
+        bolehUbah={bolehUbah}
+        kolom={[
+          { kunci: 'code', label: 'Kode', tebal: true },
+          { kunci: 'name', label: 'Nama' },
+          { kunci: 'phone', label: 'Kontak', samar: true },
+          { kunci: 'address', label: 'Alamat', samar: true },
+          { kunci: 'payment_term_days', label: 'Tempo', kanan: true, akhiran: ' hari' },
+        ]}
+        isian={[
+          { kunci: 'code', label: 'Kode supplier', kunciUtama: true },
+          { kunci: 'name', label: 'Nama supplier' },
+          { kunci: 'phone', label: 'Kontak / No HP' },
+          { kunci: 'address', label: 'Alamat' },
+          { kunci: 'payment_term_days', label: 'Tempo pembayaran (hari)', tipe: 'number' },
+        ]}
+      />}
     </>
+  )
+}
+
+/**
+ * Tabel master sederhana untuk bahan dan supplier.
+ *
+ * Keduanya hanya daftar rujukan tanpa perhitungan apa pun, jadi satu komponen
+ * berdasarkan definisi kolom lebih jujur daripada dua komponen yang isinya
+ * hampir sama persis.
+ */
+function TabelSederhana({ action, judul, bolehUbah, kolom, isian, catatan }) {
+  const { data, galat, memuat, muatUlang } = useMuat(`${action}.list`, {})
+  const [ubah, setUbah] = useState(null)
+
+  if (memuat) return <SedangMemuat />
+  if (galat) return <Galat galat={galat} coba={muatUlang} />
+
+  return (
+    <>
+      {ubah && (
+        <FormSederhana
+          action={action}
+          judul={judul}
+          isian={isian}
+          awal={ubah}
+          onTutup={() => setUbah(null)}
+          onSelesai={() => { setUbah(null); muatUlang() }}
+        />
+      )}
+
+      <Kartu
+        judul={`${data.jumlah} ${judul}`}
+        padat
+        aksi={bolehUbah && (
+          <Tombol ukuran="kecil" onClick={() => setUbah({ baru: true })}>
+            + Tambah
+          </Tombol>
+        )}
+      >
+        {data.daftar.length === 0 ? (
+          <Kosong judul={`Belum ada ${judul} tercatat`} />
+        ) : (
+          <Tabel kepala={[...kolom.map((k) => ({ label: k.label, kanan: k.kanan })), { label: '' }]}>
+            {data.daftar.map((baris) => (
+              <tr key={baris.code}>
+                {kolom.map((k) => (
+                  <Sel key={k.kunci} kanan={k.kanan} samar={k.samar} tebal={k.tebal}>
+                    {baris[k.kunci] ? `${baris[k.kunci]}${k.akhiran || ''}` : '—'}
+                  </Sel>
+                ))}
+                <Sel>
+                  <div className="flex justify-end">
+                    {bolehUbah && (
+                      <Tombol varian="polos" ukuran="kecil" onClick={() => setUbah(baris)}>
+                        Ubah
+                      </Tombol>
+                    )}
+                  </div>
+                </Sel>
+              </tr>
+            ))}
+          </Tabel>
+        )}
+      </Kartu>
+
+      {catatan && <p className="mt-4 pb-4 text-sm text-slate-500">{catatan}</p>}
+    </>
+  )
+}
+
+function FormSederhana({ action, judul, isian, awal, onTutup, onSelesai }) {
+  const baru = awal.baru === true
+  const { kirim, sibuk, galat } = useKirim()
+  const [f, setF] = useState(() => {
+    const awalan = {}
+    isian.forEach((i) => { awalan[i.kunci] = awal[i.kunci] ?? '' })
+    return awalan
+  })
+
+  async function simpan(ev) {
+    ev.preventDefault()
+    try {
+      const kirimData = { ...f }
+      isian.forEach((i) => {
+        if (i.tipe === 'number') kirimData[i.kunci] = Number(f[i.kunci]) || 0
+      })
+      await kirim(`${action}.upsert`, kirimData)
+      onSelesai()
+    } catch {
+      // pesan galat sudah ditampilkan
+    }
+  }
+
+  return (
+    <PanelMaster judul={baru ? `Tambah ${judul}` : `Ubah ${awal.code}`} onTutup={onTutup}>
+      <form onSubmit={simpan} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {isian.map((i) => (
+            <Isian
+              key={i.kunci}
+              label={i.label}
+              type={i.tipe || 'text'}
+              placeholder={i.placeholder}
+              value={f[i.kunci]}
+              disabled={i.kunciUtama && !baru}
+              onChange={(e) => setF({
+                ...f,
+                [i.kunci]: i.kunciUtama ? e.target.value.toUpperCase() : e.target.value,
+              })}
+              keterangan={i.kunciUtama && !baru ? 'Kode tidak bisa diubah' : i.keterangan}
+            />
+          ))}
+        </div>
+
+        {galat && <Galat galat={galat} />}
+
+        <div className="flex justify-end gap-3">
+          <Tombol varian="kedua" type="button" onClick={onTutup}>Batal</Tombol>
+          <Tombol type="submit" sibuk={sibuk} nonaktif={!f.code || !f.name}>
+            Simpan
+          </Tombol>
+        </div>
+      </form>
+    </PanelMaster>
+  )
+}
+
+function PanelMaster({ judul, onTutup, children }) {
+  return (
+    <div className="fixed inset-0 z-20 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 sm:p-8">
+      <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-xl">
+        <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="font-semibold text-slate-900">{judul}</h2>
+          <button onClick={onTutup} className="rounded p-1.5 text-slate-400 hover:bg-slate-100"
+            aria-label="Tutup">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </header>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
   )
 }
 

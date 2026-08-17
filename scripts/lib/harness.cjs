@@ -267,7 +267,8 @@ function simpanSpreadsheet(ss, dir) {
  */
 function muatKodeGs(konteks) {
   const urutan = ['Sheets.gs', 'Auth.gs', 'Sales.gs', 'Master.gs',
-                  'Payment.gs', 'Gallon.gs', 'Dashboard.gs', 'Integrity.gs',
+                  'Payment.gs', 'Gallon.gs', 'Production.gs', 'Expense.gs',
+                  'User.gs', 'Dashboard.gs', 'Integrity.gs',
                   'Setup.gs', 'Code.gs'];
   for (const berkas of urutan) {
     const jalur = path.join(DIR_GS, berkas);

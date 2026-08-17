@@ -129,8 +129,7 @@ function main() {
   uji('action yang belum dibangun tidak diam-diam lolos', () => {
     // Rute Fase 2 ke atas belum ada. Yang penting: ditolak sebagai action
     // tak dikenal, bukan gagal dengan error internal yang membingungkan.
-    ['production.create', 'production.list', 'expense.create', 'expense.list',
-     'user.list', 'user.upsert', 'stock.current', 'master.materials.list']
+    ['stock.current', 'stock.adjust', 'materialPurchase.create', 'report.tax']
       .forEach((aksi) => {
         const r = panggil(konteks, aksi, {}, tokenAdmin);
         harusSama(r.error.code, 'UNKNOWN_ACTION', `${aksi} harus UNKNOWN_ACTION`);
@@ -894,6 +893,267 @@ function main() {
     const t = panggil(konteks, 'auth.login',
       { username: 'produksi', password: 'PasswordBaru123' }).data.token;
     const r = panggil(konteks, 'sales.list', {}, t);
+    harusSama(r.error.code, 'FORBIDDEN', 'kode error');
+  });
+
+  console.log('\n--- Produksi (Fase 4) ---');
+
+  uji('batch produksi tercatat dan menambah saldo mutasi', () => {
+    const sebelum = panggil(konteks, 'master.products.list', {}, tokenAdmin)
+      .data.daftar.find((p) => p.code === 'GD19').saldo_mutasi;
+
+    const r = panggil(konteks, 'production.create', {
+      product_code: 'GD19', qty: 500, ph_value: 6.1, tds_value: 0.003,
+      pic: 'Operator A', notes: 'batch uji',
+    }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harus(/^BTH\d{7}$/.test(r.data.batch_no), `format batch salah: ${r.data.batch_no}`);
+
+    const sesudah = panggil(konteks, 'master.products.list', {}, tokenAdmin)
+      .data.daftar.find((p) => p.code === 'GD19').saldo_mutasi;
+    harusSama(sesudah, sebelum + 500, 'produksi harus mengimbangi barang keluar');
+  });
+
+  uji('produksi menulis mutasi production_in, bukan sale_out', () => {
+    const bacaT = vm.runInContext('bacaTabel', konteks);
+    const m = bacaT('stock_movements').filter((x) => x.ref_type === 'production_batch');
+    harus(m.length > 0, 'mutasi produksi tidak ada');
+    harus(m.every((x) => x.movement_type === 'production_in'), 'jenis mutasi salah');
+    harus(m.every((x) => keAngka(x.qty) > 0), 'produksi harus bernilai positif');
+  });
+
+  uji('pH di luar rentang ditolak', () => {
+    const r = panggil(konteks, 'production.create', {
+      product_code: 'GD19', qty: 10, ph_value: 99, pic: 'Operator A',
+    }, tokenAdmin);
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('batch tanpa penanggung jawab ditolak', () => {
+    const r = panggil(konteks, 'production.create',
+      { product_code: 'GD19', qty: 10 }, tokenAdmin);
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('sales ditolak mencatat produksi', () => {
+    const r = panggil(konteks, 'production.create',
+      { product_code: 'GD19', qty: 10, pic: 'X' }, tokenSales);
+    harusSama(r.error.code, 'FORBIDDEN', 'kode error');
+  });
+
+  uji('daftar produksi menandai batch tanpa catatan mutu', () => {
+    panggil(konteks, 'production.create',
+      { product_code: 'GD12', qty: 50, pic: 'Operator B' }, tokenAdmin);
+    const r = panggil(konteks, 'production.list', {}, tokenAdmin);
+    harus(r.ok, 'gagal ambil daftar');
+    harusSama(r.data.ringkasan.tanpa_catatan_mutu, 1, 'jumlah batch tanpa mutu');
+    harus(r.data.ringkasan.per_produk.length >= 2, 'ringkasan per produk');
+  });
+
+  console.log('\n--- Biaya & laba rugi (Fase 4) ---');
+
+  uji('biaya operasional tercatat', () => {
+    const r = panggil(konteks, 'expense.create', {
+      category: 'Listrik & air', amount: 500000, description: 'PLN Agustus',
+    }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.amount, 500000, 'nominal');
+  });
+
+  uji('kategori di luar daftar ditolak', () => {
+    const r = panggil(konteks, 'expense.create',
+      { category: 'Karangan', amount: 1000, description: 'x' }, tokenAdmin);
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('biaya tanpa keterangan ditolak', () => {
+    const r = panggil(konteks, 'expense.create',
+      { category: 'Sewa', amount: 1000 }, tokenAdmin);
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('sales ditolak melihat biaya operasional', () => {
+    const r = panggil(konteks, 'expense.list', {}, tokenSales);
+    harusSama(r.error.code, 'FORBIDDEN', 'kode error');
+  });
+
+  uji('pembatalan biaya ditulis sebagai baris negatif', () => {
+    const daftar = panggil(konteks, 'expense.list', {}, tokenAdmin).data;
+    const asli = daftar.daftar.find((b) => b.amount > 0);
+    const totalSebelum = daftar.total;
+
+    const r = panggil(konteks, 'expense.reverse',
+      { expense_id: asli.expense_id, alasan: 'dobel input' }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+
+    const sesudah = panggil(konteks, 'expense.list', {}, tokenAdmin).data;
+    harusSama(sesudah.total, totalSebelum - asli.amount, 'total setelah dibatalkan');
+    harus(sesudah.daftar.some((b) => b.pembatalan), 'baris pembatalan tidak ada');
+  });
+
+  uji('laba rugi menghitung omzet dikurangi HPP dikurangi biaya', () => {
+    panggil(konteks, 'expense.create', {
+      category: 'Gaji & upah', amount: 3000000, description: 'Gaji Agustus',
+    }, tokenAdmin);
+
+    const r = panggil(konteks, 'report.profitLoss', { bulan: 12 }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    const t = r.data.total;
+    harusSama(t.laba_kotor, t.omzet - t.hpp, 'laba kotor');
+    harusSama(t.laba_bersih, t.laba_kotor - t.biaya, 'laba bersih');
+    harus(t.biaya > 0, 'biaya harus terhitung');
+    harusSama(r.data.ada_biaya_tercatat, true, 'penanda biaya');
+  });
+
+  uji('omzet laba rugi cocok dengan dashboard setelah selisih dinyatakan', () => {
+    // INV2511020 bertanggal 2026-11-30 karena salah ketik tahun, sehingga
+    // jatuh di luar jendela 36 bulan ke belakang. Laporan wajib menyatakan
+    // selisih itu, bukan membiarkan totalnya diam-diam berbeda dari Dashboard.
+    const lr = panggil(konteks, 'report.profitLoss', { bulan: 36 }, tokenAdmin).data;
+    const d = panggil(konteks, 'dashboard.summary', {}, tokenAdmin).data;
+    harusSama(lr.total.omzet + lr.omzet_di_luar_periode, d.ringkasan.omzet_total,
+      'omzet dalam periode ditambah di luar periode harus sama dengan total');
+    harus(lr.omzet_di_luar_periode > 0,
+      'invoice bertanggal masa depan harus terhitung di luar periode');
+  });
+
+  uji('sales ditolak membuka laporan laba rugi', () => {
+    const r = panggil(konteks, 'report.profitLoss', {}, tokenSales);
+    harusSama(r.error.code, 'FORBIDDEN', 'kode error');
+  });
+
+  console.log('\n--- Master bahan & supplier (Fase 4) ---');
+
+  uji('bahan hasil migrasi terbaca', () => {
+    const r = panggil(konteks, 'master.materials.list', {}, tokenAdmin);
+    harus(r.ok, 'gagal ambil bahan');
+    harusSama(r.data.jumlah, 6, 'jumlah bahan');
+    harus(r.data.daftar.some((m) => m.code === 'GLN19'), 'GLN19 tidak ada');
+  });
+
+  uji('supplier baru bisa dibuat dan diubah', () => {
+    const buat = panggil(konteks, 'master.suppliers.upsert', {
+      code: 'SUP001', name: 'CV Galon Jaya', phone: '0812-1111-2222',
+      address: 'Malang', payment_term_days: 14,
+    }, tokenAdmin);
+    harus(buat.ok, `gagal: ${buat.ok ? '' : buat.error.message}`);
+    harusSama(buat.data.dibuat, true, 'harus baru');
+
+    const ubah = panggil(konteks, 'master.suppliers.upsert', {
+      code: 'SUP001', name: 'CV Galon Jaya Abadi', payment_term_days: 30,
+    }, tokenAdmin);
+    harusSama(ubah.data.dibuat, false, 'harus pembaruan');
+
+    const daftar = panggil(konteks, 'master.suppliers.list', {}, tokenAdmin).data;
+    harusSama(daftar.daftar[0].name, 'CV Galon Jaya Abadi', 'nama terbaru');
+    harusSama(daftar.daftar[0].payment_term_days, 30, 'tempo terbaru');
+  });
+
+  console.log('\n--- Manajemen user (Fase 5) ---');
+
+  let userBaru = null;
+
+  uji('daftar user memuat aktivitas dan peringatan', () => {
+    const r = panggil(konteks, 'user.list', {}, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.jumlah, 5, 'jumlah user');
+    harusSama(r.data.jumlah_admin_aktif, 1, 'jumlah admin aktif');
+
+    const admin = r.data.daftar.find((u) => u.username === 'admin');
+    harusSama(admin.diri_sendiri, true, 'akun sendiri harus ditandai');
+    harus(admin.total_aktivitas > 0, 'aktivitas admin harus terhitung');
+
+    const zhulham = r.data.daftar.find((u) => u.username === 'zhulham');
+    harus(zhulham.jumlah_customer > 0, 'jumlah customer sales harus terhitung');
+    harusSama(zhulham.peringatan, '', 'sales yang cocok tidak boleh diperingatkan');
+  });
+
+  uji('hash password tidak pernah ikut terkirim', () => {
+    const r = panggil(konteks, 'user.list', {}, tokenAdmin);
+    const teks = JSON.stringify(r.data);
+    harus(!/password_hash/.test(teks), 'password_hash bocor ke balasan');
+    harus(!/"salt"/.test(teks), 'salt bocor ke balasan');
+  });
+
+  uji('user baru dibuat dengan password acak sekali tampil', () => {
+    const r = panggil(konteks, 'user.upsert', {
+      username: 'sitiadmin', full_name: 'Siti Administrasi', role: 'sales',
+      sales_person_name: 'Zhulham',
+    }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harusSama(r.data.dibuat, true, 'harus user baru');
+    harus(r.data.password_baru && r.data.password_baru.length >= 10,
+      'password baru harus dikembalikan');
+    userBaru = r.data;
+
+    // Password yang dikembalikan harus benar-benar bisa dipakai login.
+    const masuk = panggil(konteks, 'auth.login',
+      { username: 'sitiadmin', password: r.data.password_baru });
+    harus(masuk.ok, 'password baru tidak bisa dipakai login');
+    harusSama(masuk.data.user.sales_person_name, 'Zhulham', 'nama sales terbawa');
+  });
+
+  uji('username kembar ditolak', () => {
+    const r = panggil(konteks, 'user.upsert',
+      { username: 'admin', full_name: 'Palsu', role: 'admin' }, tokenAdmin);
+    harus(!r.ok, 'harus ditolak');
+    harus(/sudah dipakai/.test(r.error.message), `pesan: ${r.error.message}`);
+  });
+
+  uji('nama sales pada role non-sales ditolak', () => {
+    const r = panggil(konteks, 'user.upsert', {
+      username: 'operator2', full_name: 'Operator Dua', role: 'produksi',
+      sales_person_name: 'Abah',
+    }, tokenAdmin);
+    harusSama(r.error.code, 'BAD_REQUEST', 'kode error');
+  });
+
+  uji('admin terakhir tidak bisa diturunkan rolenya', () => {
+    const daftar = panggil(konteks, 'user.list', {}, tokenAdmin).data;
+    const admin = daftar.daftar.find((u) => u.username === 'admin');
+    const r = panggil(konteks, 'user.upsert', {
+      user_id: admin.user_id, full_name: 'Administrator', role: 'sales',
+      sales_person_name: 'Abah',
+    }, tokenAdmin);
+    harus(!r.ok, 'harus ditolak');
+    harus(/satu-satunya admin/.test(r.error.message), `pesan: ${r.error.message}`);
+  });
+
+  uji('admin tidak bisa menonaktifkan akunnya sendiri', () => {
+    const daftar = panggil(konteks, 'user.list', {}, tokenAdmin).data;
+    const admin = daftar.daftar.find((u) => u.username === 'admin');
+    const r = panggil(konteks, 'user.upsert', {
+      user_id: admin.user_id, full_name: 'Administrator',
+      role: 'admin', is_active: false,
+    }, tokenAdmin);
+    harus(!r.ok, 'harus ditolak');
+  });
+
+  uji('reset password membangkitkan password baru yang berfungsi', () => {
+    const r = panggil(konteks, 'user.upsert', {
+      user_id: userBaru.user_id, full_name: 'Siti Administrasi',
+      role: 'sales', sales_person_name: 'Zhulham', reset_password: true,
+    }, tokenAdmin);
+    harus(r.ok, `gagal: ${r.ok ? '' : r.error.message}`);
+    harus(r.data.password_baru, 'password baru tidak dikembalikan');
+
+    const masuk = panggil(konteks, 'auth.login',
+      { username: 'sitiadmin', password: r.data.password_baru });
+    harus(masuk.ok, 'password hasil reset tidak bisa dipakai');
+  });
+
+  uji('user nonaktif tidak bisa login', () => {
+    panggil(konteks, 'user.upsert', {
+      user_id: userBaru.user_id, full_name: 'Siti Administrasi',
+      role: 'sales', sales_person_name: 'Zhulham', is_active: false,
+    }, tokenAdmin);
+    const r = panggil(konteks, 'auth.login',
+      { username: 'sitiadmin', password: 'apa pun' });
+    harus(!r.ok, 'user nonaktif harus ditolak');
+  });
+
+  uji('sales ditolak mengelola user', () => {
+    const r = panggil(konteks, 'user.list', {}, tokenSales);
     harusSama(r.error.code, 'FORBIDDEN', 'kode error');
   });
 
